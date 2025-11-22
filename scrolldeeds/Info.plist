@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSFamilyControlsUsageDescription</key>
+	<string>ScrollDeeds uses Family Controls to help you manage screen time through Islamic mindfulness. Lock distracting apps and unlock them by reciting dhikr.</string>
+	<key>NSUserNotificationsUsageDescription</key>
+	<string>ScrollDeeds sends notifications to remind you when your screen time expires and to help you maintain mindful phone usage.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>ScrollDeeds uses speech recognition to verify your dhikr recitation. Your audio is processed on-device and sent to our secure verification service.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>ScrollDeeds needs microphone access to record your dhikr recitation for verification.</string>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+	</dict>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>processing</string>
+		<string>remote-notification</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.scrolldeeds.app.shieldCheck</string>
+	</array>
+</dict>
+</plist>
