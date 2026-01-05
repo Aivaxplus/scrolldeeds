@@ -7,6 +7,8 @@
 
 import SwiftUI
 import BackgroundTasks
+import TelemetryDeck
+import RevenueCat
 
 @main
 struct scrolldeedsApp: App {
@@ -24,6 +26,24 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
         // Ensure ShieldManager is initialized
         _ = ShieldManager.shared
+        
+        // Initialize TelemetryDeck
+        let config = TelemetryDeck.Config(appID: "BA181B0D-FF8F-4811-8E94-DA3E2C3FD17D")
+        TelemetryDeck.initialize(config: config)
+        
+        // Initialize RevenueCat
+        // Productie API Key voor Scrolldeeds (App Store)
+        let revenueCatAPIKey = "appl_wfLidJYoHXcwgXbFKMDBZGNfxGH"
+        Purchases.configure(withAPIKey: revenueCatAPIKey)
+        
+        // Configure RevenueCat with best practices
+        Purchases.shared.delegate = RevenueCatDelegate.shared
+        Purchases.logLevel = .debug // Debug log level voor troubleshooting
+        
+        debugPrint("✅ RevenueCat initialized with API key")
+        
+        // Track app launch for analytics
+        AnalyticsManager.shared.trackAppLaunch()
         
         // Register background task
         BGTaskScheduler.shared.register(forTaskWithIdentifier: "com.scrolldeeds.app.shieldCheck", using: nil) { task in

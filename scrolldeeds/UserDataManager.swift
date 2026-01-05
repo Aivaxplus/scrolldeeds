@@ -22,6 +22,7 @@ class UserDataManager: ObservableObject {
     @Published var currentStreak: Int = 0
     @Published var lastSessionDate: Date?
     @Published var dailyHistory: [DailyStats] = []
+    @Published var difficultyLevel: DifficultyLevel = .medium // Default to medium
     
     private let defaults = UserDefaults.standard
     
@@ -34,6 +35,7 @@ class UserDataManager: ObservableObject {
     private let lastSessionKey = "lastSessionDate"
     private let lastResetKey = "lastResetDate"
     private let dailyHistoryKey = "dailyHistory"
+    private let difficultyLevelKey = "difficultyLevel"
     
     init() {
         loadData()
@@ -48,10 +50,16 @@ class UserDataManager: ObservableObject {
         defaults.set(totalMinutes, forKey: totalMinutesKey)
         defaults.set(currentStreak, forKey: streakKey)
         defaults.set(lastSessionDate, forKey: lastSessionKey)
+        defaults.set(difficultyLevel.rawValue, forKey: difficultyLevelKey)
         
         if let encoded = try? JSONEncoder().encode(dailyHistory) {
             defaults.set(encoded, forKey: dailyHistoryKey)
         }
+    }
+    
+    func setDifficultyLevel(_ level: DifficultyLevel) {
+        difficultyLevel = level
+        defaults.set(level.rawValue, forKey: difficultyLevelKey)
     }
     
     func loadData() {
@@ -63,6 +71,12 @@ class UserDataManager: ObservableObject {
         
         if let date = defaults.object(forKey: lastSessionKey) as? Date {
             lastSessionDate = date
+        }
+        
+        // Load difficulty level
+        if let levelString = defaults.string(forKey: difficultyLevelKey),
+           let level = DifficultyLevel(rawValue: levelString) {
+            difficultyLevel = level
         }
         
         // Load daily history

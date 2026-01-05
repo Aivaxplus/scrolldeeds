@@ -26,10 +26,31 @@ struct ProgressView: View {
         ZStack {
             AppTheme.background.ignoresSafeArea()
             
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 20) {
-                    // Header
-                    headerSection
+            VStack(spacing: 0) {
+                // Top Header with Close Button
+                HStack {
+                    Spacer()
+                    Button(action: {
+                        HapticManager.shared.soft()
+                        dismiss()
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 28))
+                            .foregroundColor(AppTheme.textMuted)
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 20)
+                .padding(.bottom, 8)
+                
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 20) {
+                        // Header - same style as PracticeSessionView
+                        HStack {
+                            headerSection
+                            Spacer()
+                        }
+                        .padding(.horizontal, 0)
                     
                     // Show "no data yet" message if user hasn't done any sessions
                     if userDataManager.totalSessions == 0 {
@@ -49,27 +70,27 @@ struct ProgressView: View {
                     }
                 }
                 .padding(20)
+                }
             }
         }
-        .navigationTitle("Your Progress")
-        .navigationBarTitleDisplayMode(.large)
     }
     
     // MARK: - Header Section
     
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 4) {
             if userDataManager.totalSessions == 0 {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Start Your Journey")
-                        .font(.system(size: 32, weight: .bold))
-                        .foregroundColor(AppTheme.textPrimary)
-                    Text("Complete your first dhikr session")
-                        .font(.system(size: 16))
-                        .foregroundColor(AppTheme.textSecondary)
-                }
+                Text("Start Your Journey")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(AppTheme.textPrimary)
+                Text("Complete your first dhikr session")
+                    .font(.system(size: 16))
+                    .foregroundColor(AppTheme.textSecondary)
             } else {
-                Text("Track your mindful moments")
+                Text("Your Progress")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(AppTheme.textPrimary)
+                Text("See how your mindful practice is growing")
                     .font(.system(size: 16))
                     .foregroundColor(AppTheme.textSecondary)
             }

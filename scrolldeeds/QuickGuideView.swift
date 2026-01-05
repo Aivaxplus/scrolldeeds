@@ -30,9 +30,9 @@ struct QuickGuideView: View {
         ),
         GuidePage(
             icon: "clock.fill",
-            title: "15 Minutes Access",
+            title: "Unlock Duration",
             subtitle: "Use your apps mindfully",
-            description: "After verification, you get 15 minutes of access. When time runs out, ScrollDeeds keeps sending alarms until you relock. Use every minute intentionally.",
+            description: "After verification, you get access based on your chosen difficulty level. When time runs out, ScrollDeeds keeps sending alarms until you relock. Use every minute intentionally.",
             color: .orange
         ),
         GuidePage(

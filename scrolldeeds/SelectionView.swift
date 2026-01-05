@@ -40,10 +40,20 @@ struct SelectionView: View {
                 }
                 .buttonStyle(SecondaryButtonStyle(isLarge: false))
                 .familyActivityPicker(isPresented: $isPickerPresented, selection: $selection)
-                .alert("Permission Required", isPresented: $showPermissionAlert) {
-                    Button("OK") { }
-                } message: {
-                    Text("Family Controls permission was denied. Please enable it in Settings → Screen Time → ScrollDeeds")
+                .overlay {
+                    if showPermissionAlert {
+                        CustomAlertView(
+                            title: "Permission Required",
+                            message: "Family Controls permission was denied. Please enable it in Settings → Screen Time → ScrollDeeds",
+                            icon: "lock.shield.fill",
+                            iconColor: AppTheme.primary,
+                            isPresented: $showPermissionAlert,
+                            primaryAction: {
+                                showPermissionAlert = false
+                            },
+                            primaryActionTitle: "OK"
+                        )
+                    }
                 }
             } else {
                 Text("Requires iOS 16+")

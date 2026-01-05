@@ -133,15 +133,24 @@ struct PrimaryButtonStyle: ButtonStyle {
     
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: isLarge ? 17 : 15, weight: .semibold))
+            .font(.system(size: isLarge ? 16 : 15, weight: .semibold))
             .foregroundColor(.white)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, isLarge ? 16 : 12)
-            .background(AppTheme.gradientGold)
-            .cornerRadius(isLarge ? 16 : 12)
-            .shadow(color: AppTheme.accent.opacity(0.3), radius: configuration.isPressed ? 2 : 8, y: configuration.isPressed ? 1 : 4)
+            .padding(.vertical, isLarge ? 15 : 12)
+            .background(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.94, green: 0.74, blue: 0.38),
+                        Color(red: 0.88, green: 0.66, blue: 0.30)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .cornerRadius(isLarge ? 14 : 12)
+            .shadow(color: AppTheme.accent.opacity(configuration.isPressed ? 0.15 : 0.35), radius: configuration.isPressed ? 4 : 12, y: configuration.isPressed ? 2 : 6)
             .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
-            .animation(.easeInOut(duration: 0.15), value: configuration.isPressed)
+            .animation(.easeInOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 
@@ -150,18 +159,18 @@ struct SecondaryButtonStyle: ButtonStyle {
     
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: isLarge ? 17 : 15, weight: .medium))
+            .font(.system(size: isLarge ? 16 : 15, weight: .semibold))
             .foregroundColor(AppTheme.primary)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, isLarge ? 16 : 12)
+            .padding(.vertical, isLarge ? 15 : 12)
             .background(AppTheme.primary.opacity(0.08))
-            .cornerRadius(isLarge ? 16 : 12)
+            .cornerRadius(isLarge ? 14 : 12)
             .overlay(
-                RoundedRectangle(cornerRadius: isLarge ? 16 : 12)
-                    .stroke(AppTheme.primary.opacity(0.2), lineWidth: 1)
+                RoundedRectangle(cornerRadius: isLarge ? 14 : 12)
+                    .stroke(AppTheme.primary.opacity(0.15), lineWidth: 1.5)
             )
             .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
-            .animation(.easeInOut(duration: 0.15), value: configuration.isPressed)
+            .animation(.easeInOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 

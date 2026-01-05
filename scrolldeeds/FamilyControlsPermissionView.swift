@@ -71,7 +71,7 @@ struct FamilyControlsPermissionView: View {
                     infoRow(icon: "lock.fill", text: "Only selected apps will be locked")
                     infoRow(icon: "hand.raised.fill", text: "You can change settings anytime")
                 }
-                .padding(.horizontal, 30)
+                .padding(.horizontal, 40)
                 
                 Spacer()
                 
@@ -106,30 +106,28 @@ struct FamilyControlsPermissionView: View {
                 }
                 .disabled(isRequesting)
                 .padding(.horizontal, 30)
-                
-                Button("Skip for Now") {
-                    isPresented = false
-                }
-                .font(.system(size: 16))
-                .foregroundColor(AppTheme.textSecondary)
                 .padding(.bottom, 40)
             }
         }
     }
     
     private func infoRow(icon: String, text: String) -> some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 20))
+                .font(.system(size: 18))
                 .foregroundColor(AppTheme.primary)
-                .frame(width: 30)
+                .frame(width: 24)
             
             Text(text)
                 .font(.system(size: 15))
                 .foregroundColor(AppTheme.textSecondary)
-            
-            Spacer()
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+        .background(AppTheme.card.opacity(0.5))
+        .cornerRadius(12)
     }
     
     private func requestPermission() {

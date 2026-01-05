@@ -6,6 +6,14 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		3A68971F2ED311A200BE7150 /* TelemetryClient in Frameworks */ = {isa = PBXBuildFile; productRef = 3A68971E2ED311A200BE7150 /* TelemetryClient */; };
+		3A6897212ED311A200BE7150 /* TelemetryDeck in Frameworks */ = {isa = PBXBuildFile; productRef = 3A6897202ED311A200BE7150 /* TelemetryDeck */; };
+		3A79C1482EE2D403005B6C01 /* Products.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 3A79C1472EE2D403005B6C01 /* Products.storekit */; };
+		3A79C1572EE31534005B6C01 /* RevenueCat in Frameworks */ = {isa = PBXBuildFile; productRef = 3A79C1562EE31534005B6C01 /* RevenueCat */; };
+		3A79C1592EE31534005B6C01 /* RevenueCatUI in Frameworks */ = {isa = PBXBuildFile; productRef = 3A79C1582EE31534005B6C01 /* RevenueCatUI */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXCopyFilesBuildPhase section */
 		3A25C17E2EBCA9C800D2AEF1 /* Embed Foundation Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
@@ -20,6 +28,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		3A79C1472EE2D403005B6C01 /* Products.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = Products.storekit; sourceTree = "<group>"; };
 		3A9717992EB37FC90079D432 /* scrolldeeds.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = scrolldeeds.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -49,6 +58,10 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3A79C1592EE31534005B6C01 /* RevenueCatUI in Frameworks */,
+				3A68971F2ED311A200BE7150 /* TelemetryClient in Frameworks */,
+				3A6897212ED311A200BE7150 /* TelemetryDeck in Frameworks */,
+				3A79C1572EE31534005B6C01 /* RevenueCat in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -58,6 +71,7 @@
 		3A9717902EB37FC80079D432 = {
 			isa = PBXGroup;
 			children = (
+				3A79C1472EE2D403005B6C01 /* Products.storekit */,
 				3A97179B2EB37FC90079D432 /* scrolldeeds */,
 				3A97179A2EB37FC90079D432 /* Products */,
 			);
@@ -92,6 +106,10 @@
 			);
 			name = scrolldeeds;
 			packageProductDependencies = (
+				3A68971E2ED311A200BE7150 /* TelemetryClient */,
+				3A6897202ED311A200BE7150 /* TelemetryDeck */,
+				3A79C1562EE31534005B6C01 /* RevenueCat */,
+				3A79C1582EE31534005B6C01 /* RevenueCatUI */,
 			);
 			productName = scrolldeeds;
 			productReference = 3A9717992EB37FC90079D432 /* scrolldeeds.app */;
@@ -122,6 +140,8 @@
 			mainGroup = 3A9717902EB37FC80079D432;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				3A68971D2ED311A200BE7150 /* XCRemoteSwiftPackageReference "SwiftClient" */,
+				3A79C1552EE31534005B6C01 /* XCRemoteSwiftPackageReference "purchases-ios-spm" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 3A97179A2EB37FC90079D432 /* Products */;
@@ -138,6 +158,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3A79C1482EE2D403005B6C01 /* Products.storekit in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -283,7 +304,7 @@
 				CODE_SIGN_ENTITLEMENTS = scrolldeeds/scrolldeeds.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 14;
 				DEVELOPMENT_TEAM = CVR96D7Q68;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -299,7 +320,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.scrolldeeds.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -321,7 +342,7 @@
 				CODE_SIGN_ENTITLEMENTS = scrolldeeds/scrolldeeds.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 14;
 				DEVELOPMENT_TEAM = CVR96D7Q68;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -337,7 +358,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.scrolldeeds.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -373,6 +394,48 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		3A68971D2ED311A200BE7150 /* XCRemoteSwiftPackageReference "SwiftClient" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/TelemetryDeck/SwiftClient";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.9.10;
+			};
+		};
+		3A79C1552EE31534005B6C01 /* XCRemoteSwiftPackageReference "purchases-ios-spm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/RevenueCat/purchases-ios-spm.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.49.3;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		3A68971E2ED311A200BE7150 /* TelemetryClient */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3A68971D2ED311A200BE7150 /* XCRemoteSwiftPackageReference "SwiftClient" */;
+			productName = TelemetryClient;
+		};
+		3A6897202ED311A200BE7150 /* TelemetryDeck */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3A68971D2ED311A200BE7150 /* XCRemoteSwiftPackageReference "SwiftClient" */;
+			productName = TelemetryDeck;
+		};
+		3A79C1562EE31534005B6C01 /* RevenueCat */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3A79C1552EE31534005B6C01 /* XCRemoteSwiftPackageReference "purchases-ios-spm" */;
+			productName = RevenueCat;
+		};
+		3A79C1582EE31534005B6C01 /* RevenueCatUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3A79C1552EE31534005B6C01 /* XCRemoteSwiftPackageReference "purchases-ios-spm" */;
+			productName = RevenueCatUI;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 3A9717912EB37FC80079D432 /* Project object */;
 }

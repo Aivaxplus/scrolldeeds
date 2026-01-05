@@ -30,7 +30,9 @@ struct RecitationView: View {
             }
             .pickerStyle(.segmented)
 
-            Text("Say it 3 times to unlock 15 minutes")
+            // Get duration from UserDefaults (fallback to medium if not set)
+            let level = UserDefaults.standard.string(forKey: "difficultyLevel").flatMap { DifficultyLevel(rawValue: $0) } ?? .medium
+            Text("Say it 3 times to unlock \(level.displayDuration)")
                 .font(.headline)
 
             Text("Count: \(detector.recognizedCount)/3")

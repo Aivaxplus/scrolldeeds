@@ -37,11 +37,14 @@ struct AlarmView: View {
                     .multilineTextAlignment(.center)
                 
                 // Message
-                Text("Your 15 minutes are over.\nYour apps are now locked.")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundColor(.white.opacity(0.9))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 40)
+                VStack {
+                    let level = UserDefaults.standard.string(forKey: "difficultyLevel").flatMap { DifficultyLevel(rawValue: $0) } ?? .medium
+                    Text("Your \(level.displayDuration) are over.\nYour apps are now locked.")
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundColor(.white.opacity(0.9))
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.horizontal, 40)
                 
                 // Dismiss button
                 Button(action: {

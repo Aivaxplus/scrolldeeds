@@ -26,6 +26,7 @@ struct ContentView: View {
     @StateObject private var localStorage = LocalStorageManager.shared
     @StateObject private var userDataManager = UserDataManager()
     @StateObject private var notificationManager = NotificationManager.shared
+    @StateObject private var subscriptionManager = SubscriptionManager.shared
     @AppStorage("userAppearance") private var userAppearance: Int = 0 // 0 = Dark (default), 1 = Light, 2 = System
 
     @State private var isRecitationPresented: Bool = false
@@ -33,12 +34,17 @@ struct ContentView: View {
     @State private var unlockEndsAt: Date? = nil
     @State private var showOnboarding: Bool = true
     @State private var showQuestionnaire: Bool = false
+    @State private var showHardPaywall: Bool = false
     @State private var currentTime: Date = Date()
     @State private var showProgressView: Bool = false
     @State private var showSettingsView: Bool = false
     @State private var showQuickGuide: Bool = false
     @State private var showSplashScreen: Bool = true // Always shows on app launch
     @State private var showAlarm: Bool = false // Alarm view when 15 minutes expire
+    @State private var showFeedback: Bool = false // Feedback popup after 3 unlocks
+    @State private var showCustomLock: Bool = false // Custom lock view when shield is active
+    @State private var showDifficultyInfo: DifficultyLevel? = nil // Difficulty level info popup
+    @State private var customLockDismissed: Bool = false // Track if user manually dismissed custom lock view
     
     // Timer to update the countdown every second
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -62,12 +68,58 @@ struct ContentView: View {
                 }
                 .transition(.opacity)
                 .zIndex(1000) // Ensure alarm is on top
+            } else if showCustomLock {
+                // Custom lock view when shield is active
+                CustomLockView(
+                    userDataManager: userDataManager,
+                    onUnlock: {
+                        // On unlock: track session and update state
+                        let minutesEarned = unlockDurationMinutes
+                        userDataManager.completeSession(minutesEarned: minutesEarned)
+                        
+                        // Track analytics
+                        AnalyticsManager.shared.trackSessionCompleted()
+                        
+                        // Send feedback to webhook
+                        FeedbackService.shared.sendFeedback(sessionCount: userDataManager.totalSessions)
+                        
+                        // Check if feedback popup should be shown
+                        let currentSessionCount = userDataManager.totalSessions
+                        debugPrint("📊 Feedback check (CustomLockView): totalSessions = \(currentSessionCount)")
+                        checkAndShowFeedbackPopup(sessionCount: currentSessionCount)
+                        
+                        isUnlockActive = true
+                        let end = Date().addingTimeInterval(TimeInterval(minutesEarned * 60))
+                        unlockEndsAt = end
+                        saveUnlockTime(end)
+                        shieldManager.setUnlockEndTime(end)
+                        
+                        // Cancel old notifications
+                        notificationManager.cancelUnlockExpiryNotification()
+                        notificationManager.cancelRecurringTimeExpiredNotifications()
+                        notificationManager.cancelLockedAppReminders()
+                        
+                        // Schedule new notification
+                        notificationManager.scheduleUnlockExpiryNotification(expiresAt: end)
+                        
+                        showCustomLock = false
+                    },
+                    onDismiss: {
+                        // User tapped close button - return to home screen
+                        showCustomLock = false
+                        customLockDismissed = true // Mark as manually dismissed
+                    }
+                )
+                .transition(.opacity)
+                .zIndex(999)
             } else {
                 mainContent
                     .onAppear {
                         debugPrint("✨ CONTENTVIEW: Main content is now visible")
                         // Restore unlock state and notifications when app starts
                         restoreUnlockState()
+                        // Cancel daily recurring notifications since user opened the app
+                        notificationManager.cancelDailyRecurringNotifications()
                     }
             }
         }
@@ -77,46 +129,57 @@ struct ContentView: View {
         NavigationView {
             if !localStorage.hasCompletedOnboarding {
                 if showOnboarding {
-                    // First: Onboarding
+                    // First: Onboarding slides
                     OnboardingView(onNext: {
                         showOnboarding = false
                         showQuestionnaire = true
                     })
                 } else if showQuestionnaire {
-                    // Second: Questionnaire with app selection
+                    // Second: Extended psychological questionnaire
                     QuestionnaireView(
                         onFinished: { 
-                            localStorage.completeOnboarding()
-                            // Show quick guide after brief delay
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                                if !localStorage.hasSeenQuickGuide {
-                                    showQuickGuide = true
-                                }
-                            }
+                            // After questionnaire, show SOFT paywall (can skip)
+                            showQuestionnaire = false
+                            showHardPaywall = true
                         }, 
                         shieldManager: shieldManager,
-                        localStorage: localStorage
+                        localStorage: localStorage,
+                        userDataManager: userDataManager
+                    )
+                } else if showHardPaywall {
+                    // Third: SOFT PAYWALL - Can skip with X button
+                    // Hard paywall comes later when user tries to unlock apps
+                    SoftPaywallView(
+                        onSubscribed: {
+                            // User subscribed!
+                            completeOnboardingFlow()
+                        },
+                        onSkip: {
+                            // User skipped - still complete onboarding, they'll see hard paywall when unlocking
+                            completeOnboardingFlow()
+                        }
                     )
                 }
             } else {
-                // Main dashboard
-                ZStack {
-                    AppTheme.background.ignoresSafeArea()
-                    
+                // Main dashboard with bottom navigation bar
+                VStack(spacing: 0) {
+                    // Main content
                     ScrollView(showsIndicators: false) {
                         VStack(alignment: .leading, spacing: 20) {
                             dashboardCard
                             readyCard
+                            difficultyLevelCard
                             lockedApps
                             progressCard
                         }
                         .padding(20)
+                        .padding(.bottom, 20)
                     }
+                    
+                    // Bottom Navigation Bar - Fixed at bottom
+                    customBottomNavigationBar
                 }
-                .navigationTitle("ScrollDeeds")
-                .navigationBarTitleDisplayMode(.large)
-                .toolbarBackground(AppTheme.background, for: .navigationBar)
-                .toolbarBackground(.visible, for: .navigationBar)
+                .background(AppTheme.background.ignoresSafeArea())
                 .sheet(isPresented: $showProgressView) {
                     NavigationView {
                         ProgressView(userDataManager: userDataManager, localStorage: localStorage)
@@ -124,29 +187,18 @@ struct ContentView: View {
                 }
                 .sheet(isPresented: $showSettingsView) {
                     NavigationView {
-                        SettingsView(localStorage: localStorage)
+                        SettingsView(localStorage: localStorage, userDataManager: userDataManager)
                     }
                 }
+        .sheet(item: $showDifficultyInfo) { level in
+            DifficultyLevelInfoView(level: level) {
+                showDifficultyInfo = nil
+            }
+        }
                 .fullScreenCover(isPresented: $showQuickGuide) {
                     QuickGuideView(onComplete: {
                         showQuickGuide = false
                     })
-                }
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        Button(action: { showProgressView = true }) {
-                            Image(systemName: "chart.bar.fill")
-                                .font(.system(size: 20))
-                                .foregroundColor(AppTheme.primary)
-                        }
-                    }
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button(action: { showSettingsView = true }) {
-                            Image(systemName: "gearshape.fill")
-                                .font(.system(size: 20))
-                                .foregroundColor(AppTheme.primary)
-                        }
-                    }
                 }
             }
         }
@@ -179,6 +231,9 @@ struct ContentView: View {
                 shieldManager.applyShield()
             }
             
+            // Show/hide custom lock view based on shield state
+            updateCustomLockView()
+            
             // Clear badge when app opens
             notificationManager.clearBadge()
         }
@@ -207,9 +262,11 @@ struct ContentView: View {
                 unlockEndsAt = nil
                 clearUnlockTime()
                 
-                // NOW cancel notifications because shield is being activated
+                // Cancel ALL old notifications to ensure clean state
                 notificationManager.cancelUnlockExpiryNotification()
                 notificationManager.cancelRecurringTimeExpiredNotifications()
+                notificationManager.cancelLockedAppReminders()
+                notificationManager.cancelLockedAppRemindersAfterTap()
                 
                 showAlarm = true // Show full-screen alarm
             } else {
@@ -218,15 +275,26 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $isRecitationPresented) {
-            PracticeSessionView(detector: detector) {
-                // On completion: unlock apps for 15 minutes
+            PracticeSessionView(detector: detector, userDataManager: userDataManager) {
+                // On completion: unlock apps based on difficulty level (only if premium)
+                guard subscriptionManager.isPremium else {
+                    // User is not premium - unlock should not happen
+                    // Paywall will be shown in PracticeSessionView
+                    return
+                }
+                
                 HapticManager.shared.appsUnlocked()
-                userDataManager.completeSession(minutesEarned: 15)
+                let minutesEarned = unlockDurationMinutes
+                userDataManager.completeSession(minutesEarned: minutesEarned)
                 shieldManager.removeShield()
                 isUnlockActive = true
                 
-                // Set unlock time to 15 minutes from now
-                let end = Date().addingTimeInterval(15 * 60) // 15 minutes unlock time
+                // Hide custom lock view
+                showCustomLock = false
+                customLockDismissed = false // Reset dismissed flag when unlocking
+                
+                // Set unlock time based on difficulty level
+                let end = Date().addingTimeInterval(TimeInterval(minutesEarned * 60))
                 unlockEndsAt = end
                 saveUnlockTime(end)
                 shieldManager.setUnlockEndTime(end)
@@ -239,9 +307,97 @@ struct ContentView: View {
                 // Schedule notification for when time expires (this will also schedule recurring alarms)
                 notificationManager.scheduleUnlockExpiryNotification(expiresAt: end)
                 
-                debugPrint("✅ Apps unlocked for 15 minutes - shield will auto-apply after timer")
+                // Track session completion for analytics
+                AnalyticsManager.shared.trackSessionCompleted()
+                
+                // Get session count AFTER completeSession has incremented it
+                let currentSessionCount = userDataManager.totalSessions
+                debugPrint("📊 Session completed! Total sessions now: \(currentSessionCount)")
+                
+                // Send feedback to webhook (first time only, after 3 unlocks)
+                FeedbackService.shared.sendFeedback(sessionCount: currentSessionCount)
+                
+                // Show feedback popup:
+                // - First time: after 3 unlocks
+                // - Then: every 7 unlocks (10, 17, 24, etc.)
+                checkAndShowFeedbackPopup(sessionCount: currentSessionCount)
+                
+                debugPrint("✅ Apps unlocked for \(userDataManager.difficultyLevel.displayDuration) - shield will auto-apply after timer")
             }
         }
+        .overlay {
+            if showFeedback {
+                FeedbackView(
+                    isPresented: $showFeedback,
+                    onRate: {
+                        // Open App Store rating
+                        if let url = URL(string: "https://apps.apple.com/app/id6754699333?action=write-review") {
+                            UIApplication.shared.open(url)
+                        }
+                    },
+                    onDismiss: {
+                        // User dismissed - mark as dismissed for this milestone
+                        UserDefaults.standard.set(true, forKey: "feedback_dismissed")
+                        debugPrint("📊 Feedback dismissed by user")
+                    }
+                )
+            }
+        }
+    }
+    
+    private var customBottomNavigationBar: some View {
+        HStack(spacing: 0) {
+            // Progress button (left)
+            Button(action: {
+                HapticManager.shared.soft()
+                showProgressView = true
+            }) {
+                VStack(spacing: 4) {
+                    Image(systemName: "chart.line.uptrend.xyaxis")
+                        .font(.system(size: 24, weight: showProgressView ? .semibold : .regular))
+                }
+                .foregroundColor(showProgressView ? AppTheme.textPrimary : AppTheme.textMuted)
+                .frame(maxWidth: .infinity)
+                .frame(height: 50)
+            }
+            
+            // Home button (center)
+            Button(action: {
+                HapticManager.shared.soft()
+            }) {
+                VStack(spacing: 4) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 24, weight: .semibold))
+                }
+                .foregroundColor(AppTheme.textPrimary)
+                .frame(maxWidth: .infinity)
+                .frame(height: 50)
+            }
+            
+            // Settings button (right)
+            Button(action: {
+                HapticManager.shared.soft()
+                showSettingsView = true
+            }) {
+                VStack(spacing: 4) {
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 24, weight: showSettingsView ? .semibold : .regular))
+                }
+                .foregroundColor(showSettingsView ? AppTheme.textPrimary : AppTheme.textMuted)
+                .frame(maxWidth: .infinity)
+                .frame(height: 50)
+            }
+        }
+        .background(
+            AppTheme.card
+                .ignoresSafeArea(edges: .bottom)
+        )
+        .overlay(
+            Rectangle()
+                .fill(AppTheme.muted.opacity(0.2))
+                .frame(height: 0.5),
+            alignment: .top
+        )
     }
     
     private var header: some View {
@@ -249,7 +405,7 @@ struct ContentView: View {
             Text("Stop doomscrolling with Dhikr")
                 .font(.title)
                 .bold()
-            Text("Lock selected apps. Unlock 15 minutes by reciting 3 times.")
+            Text("Lock selected apps. Unlock \(userDataManager.difficultyLevel.displayDuration) by reciting 3 times.")
                 .foregroundColor(.secondary)
         }
     }
@@ -260,99 +416,137 @@ struct ContentView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Apps Currently")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(AppTheme.textOnDark.opacity(0.85))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(AppTheme.textOnDark.opacity(0.8))
+                        .textCase(.uppercase)
+                        .tracking(0.5)
                     Text(isUnlockActive ? "Unlocked" : "Locked")
-                        .font(.system(size: 36, weight: .bold, design: .rounded))
+                        .font(.system(size: 34, weight: .bold, design: .rounded))
                         .foregroundColor(AppTheme.textOnDark)
                 }
                 Spacer()
                 ZStack {
+                    // Outer glow ring
+                    Circle()
+                        .stroke(AppTheme.textOnDark.opacity(0.15), lineWidth: 2)
+                        .frame(width: 72, height: 72)
+                    
                     // Animated pulse effect when locked
                     if !isUnlockActive {
                         Circle()
-                            .fill(AppTheme.textOnDark.opacity(0.1))
-                            .frame(width: 80, height: 80)
-                            .scaleEffect(isUnlockActive ? 1.0 : 1.2)
-                            .opacity(isUnlockActive ? 0 : 0.3)
+                            .fill(AppTheme.textOnDark.opacity(0.08))
+                            .frame(width: 64, height: 64)
+                            .scaleEffect(1.15)
+                            .opacity(0.5)
                             .animation(
-                                Animation.easeInOut(duration: 1.5)
+                                Animation.easeInOut(duration: 1.8)
                                     .repeatForever(autoreverses: true),
                                 value: isUnlockActive
                             )
                     }
                     
                     Circle()
-                        .fill(AppTheme.textOnDark.opacity(0.2))
-                        .frame(width: 60, height: 60)
-                        .scaleEffect(isUnlockActive ? 1.1 : 1.0)
-                        .animation(.spring(response: 0.4, dampingFraction: 0.6), value: isUnlockActive)
+                        .fill(AppTheme.textOnDark.opacity(0.18))
+                        .frame(width: 56, height: 56)
                     
                     Image(systemName: isUnlockActive ? "lock.open.fill" : "lock.fill")
-                        .font(.system(size: 26, weight: .semibold))
+                        .font(.system(size: 24, weight: .semibold))
                         .foregroundColor(AppTheme.textOnDark)
                         .rotationEffect(.degrees(isUnlockActive ? 0 : -5))
-                        .scaleEffect(isUnlockActive ? 1.1 : 1.0)
                         .animation(.spring(response: 0.4, dampingFraction: 0.6), value: isUnlockActive)
                 }
             }
-            .padding(24)
-            .background(AppTheme.gradientPrimary)
+            .padding(22)
+            .background(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.22, green: 0.58, blue: 0.40),
+                        Color(red: 0.18, green: 0.50, blue: 0.34)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
             
-            // Bottom status section (with proper background)
+            // Bottom status section
             if isUnlockActive, let end = unlockEndsAt {
                 let remaining = max(0, Int(end.timeIntervalSince(currentTime)))
-                HStack(spacing: 8) {
-                    Image(systemName: "clock.fill")
-                        .font(.system(size: 12))
-                        .foregroundColor(AppTheme.accent)
-                    Text("Time left: \(remaining / 60)m \(remaining % 60)s")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(AppTheme.textPrimary)
-                        .monospacedDigit()
+                HStack(spacing: 10) {
+                    ZStack {
+                        Circle()
+                            .fill(AppTheme.accent.opacity(0.15))
+                            .frame(width: 32, height: 32)
+                        Image(systemName: "clock.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(AppTheme.accent)
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Time Remaining")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(AppTheme.textSecondary)
+                        Text("\(remaining / 60)m \(remaining % 60)s")
+                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                            .foregroundColor(AppTheme.textPrimary)
+                            .monospacedDigit()
+                    }
                     Spacer()
                 }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, 18)
                 .padding(.vertical, 14)
                 .background(AppTheme.card)
             } else {
-                HStack(spacing: 8) {
-                    Image(systemName: "lock.fill")
-                        .font(.system(size: 12))
-                        .foregroundColor(.orange)
-                    Text("Recite dhikr to unlock your apps")
+                HStack(spacing: 10) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.orange.opacity(0.12))
+                            .frame(width: 32, height: 32)
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(.orange)
+                    }
+                    Text("Start dhikr to unlock")
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(AppTheme.textSecondary)
                     Spacer()
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(AppTheme.textMuted)
                 }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, 18)
                 .padding(.vertical, 14)
                 .background(AppTheme.card)
             }
         }
         .background(AppTheme.card)
         .clipShape(RoundedRectangle(cornerRadius: 24))
-        .shadow(color: AppTheme.primary.opacity(0.2), radius: 20, y: 10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 24)
+                .stroke(AppTheme.primary.opacity(0.1), lineWidth: 1)
+        )
+        .shadow(color: AppTheme.primary.opacity(0.15), radius: 24, y: 12)
     }
 
     private var readyCard: some View {
         VStack(alignment: .leading, spacing: 20) {
-            HStack(alignment: .top, spacing: 16) {
+            HStack(alignment: .top, spacing: 14) {
                 ZStack {
                     Circle()
-                        .fill(AppTheme.primary.opacity(0.12))
-                        .frame(width: 64, height: 64)
+                        .fill(AppTheme.primary.opacity(0.1))
+                        .frame(width: 56, height: 56)
+                    Circle()
+                        .stroke(AppTheme.primary.opacity(0.2), lineWidth: 1.5)
+                        .frame(width: 56, height: 56)
                     Image(systemName: "sparkles")
-                        .font(.system(size: 26, weight: .semibold))
+                        .font(.system(size: 24, weight: .semibold))
                         .foregroundColor(AppTheme.primary)
                 }
                 
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Ready to Unlock?")
-                        .font(.system(size: 20, weight: .bold))
+                        .font(.system(size: 19, weight: .bold))
                         .foregroundColor(AppTheme.textPrimary)
-                    Text("Complete a spiritual practice to unlock your apps for 15 minutes. When the timer ends, alarms keep ringing until you relock.")
-                        .font(.system(size: 15))
+                    Text("Recite dhikr 3 times to unlock for \(userDataManager.difficultyLevel.displayDuration)")
+                        .font(.system(size: 14))
                         .foregroundColor(AppTheme.textSecondary)
                         .lineSpacing(3)
                 }
@@ -366,73 +560,124 @@ struct ContentView: View {
             }) {
                 HStack(spacing: 10) {
                     if !isUnlockActive {
-                        Image(systemName: "sparkles")
+                        Image(systemName: "mic.fill")
                             .font(.system(size: 16, weight: .semibold))
-                            .rotationEffect(.degrees(isUnlockActive ? 0 : 15))
-                            .animation(
-                                Animation.easeInOut(duration: 1.0)
-                                    .repeatForever(autoreverses: true),
-                                value: isUnlockActive
-                            )
                     }
                     
-                    Text(isUnlockActive ? "Apps Already Unlocked" : "Unlock Apps with Dhikr")
+                    Text(isUnlockActive ? "Already Unlocked" : "Start Dhikr Session")
                     
                     if !isUnlockActive {
-                        Image(systemName: "arrow.right.circle.fill")
-                            .font(.system(size: 16, weight: .semibold))
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 14, weight: .semibold))
                     }
                 }
             }
             .buttonStyle(PrimaryButtonStyle())
             .disabled(isUnlockActive)
             .opacity(isUnlockActive ? 0.6 : 1.0)
-            .scaleEffect(isUnlockActive ? 0.98 : 1.0)
-            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isUnlockActive)
             
-            HStack(spacing: 6) {
-                Image(systemName: "info.circle.fill")
-                    .font(.system(size: 12))
+            // Inspirational quote
+            HStack(spacing: 8) {
+                Image(systemName: "quote.opening")
+                    .font(.system(size: 10))
+                    .foregroundColor(AppTheme.accent.opacity(0.6))
+                Text("Mindful moments lead to intentional choices")
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundColor(AppTheme.textMuted)
-                Text("You'll recite dhikr 3 times")
-                    .font(.system(size: 13))
+                    .italic()
+            }
+            .padding(.top, 2)
+        }
+        .padding(20)
+        .background(AppTheme.card)
+        .cornerRadius(20)
+        .overlay(
+            RoundedRectangle(cornerRadius: 20)
+                .stroke(AppTheme.muted.opacity(0.3), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.04), radius: 12, y: 6)
+    }
+    
+    private var difficultyLevelCard: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(userDataManager.difficultyLevel.color.opacity(0.12))
+                    .frame(width: 44, height: 44)
+                Image(systemName: userDataManager.difficultyLevel.icon)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(userDataManager.difficultyLevel.color)
+            }
+            
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Difficulty")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(AppTheme.textMuted)
+                    .textCase(.uppercase)
+                    .tracking(0.3)
+                HStack(spacing: 6) {
+                    Text(userDataManager.difficultyLevel.displayName)
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(AppTheme.textPrimary)
+                    Text("•")
+                        .foregroundColor(AppTheme.textMuted)
+                    Text(userDataManager.difficultyLevel.displayDuration)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(userDataManager.difficultyLevel.color)
+                }
+            }
+            
+            Spacer()
+            
+            Button(action: {
+                HapticManager.shared.soft()
+                showSettingsView = true
+            }) {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(AppTheme.textMuted)
             }
         }
-        .padding(24)
+        .padding(16)
         .background(AppTheme.card)
-        .cornerRadius(20)
-        .shadow(color: Color.black.opacity(0.06), radius: 15, y: 8)
+        .cornerRadius(16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(AppTheme.muted.opacity(0.3), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.03), radius: 8, y: 4)
     }
 
     private var lockedApps: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Header with animated lock icon
+        VStack(alignment: .leading, spacing: 18) {
+            // Header
             HStack(spacing: 12) {
                 ZStack {
                     Circle()
-                        .fill(shieldManager.isShieldActive ? AppTheme.error.opacity(0.15) : AppTheme.primary.opacity(0.15))
-                        .frame(width: 44, height: 44)
+                        .fill(shieldManager.isShieldActive ? AppTheme.error.opacity(0.12) : AppTheme.primary.opacity(0.12))
+                        .frame(width: 42, height: 42)
                     
                     Image(systemName: shieldManager.isShieldActive ? "lock.fill" : "lock.open.fill")
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(.system(size: 18, weight: .semibold))
                         .foregroundColor(shieldManager.isShieldActive ? AppTheme.error : AppTheme.primary)
                 }
-                .animation(.spring(response: 0.3, dampingFraction: 0.6), value: shieldManager.isShieldActive)
                 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 3) {
                     Text("Locked Apps")
-                        .font(.system(size: 20, weight: .bold))
+                        .font(.system(size: 18, weight: .bold))
                         .foregroundColor(AppTheme.textPrimary)
                     
                     HStack(spacing: 6) {
-                        Text(shieldManager.isShieldActive ? "Currently Locked" : "Currently Unlocked")
-                            .font(.system(size: 13, weight: .medium))
+                        Circle()
+                            .fill(shieldManager.isShieldActive ? AppTheme.error : AppTheme.success)
+                            .frame(width: 6, height: 6)
+                        Text(shieldManager.isShieldActive ? "Locked" : "Unlocked")
+                            .font(.system(size: 12, weight: .medium))
                             .foregroundColor(AppTheme.textSecondary)
                         
                         if isUnlockActive {
                             Text("• \(timeRemaining())")
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(.system(size: 12, weight: .semibold))
                                 .foregroundColor(AppTheme.accent)
                         }
                     }
@@ -441,161 +686,162 @@ struct ContentView: View {
                 Spacer()
                 
                 // Badge with count
-                HStack(spacing: 6) {
-                    Image(systemName: "app.badge.fill")
-                        .font(.system(size: 12))
-                        .foregroundColor(AppTheme.primary)
-                    Text("\(shieldManager.selectedApplications.count)")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundColor(AppTheme.primary)
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(AppTheme.primary.opacity(0.12))
-                .cornerRadius(14)
+                Text("\(shieldManager.selectedApplications.count)")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(AppTheme.primary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(AppTheme.primary.opacity(0.1))
+                    .cornerRadius(10)
             }
             
-            // Selection button with better styling
+            // Selection button
             SelectionView(shieldManager: shieldManager)
             
-            // App list with animations
+            // App list
             #if canImport(FamilyControls)
             if #available(iOS 16.0, *), !shieldManager.selectedApplications.isEmpty {
-                VStack(spacing: 12) {
+                VStack(spacing: 10) {
                     // Info banner
-                    HStack(spacing: 10) {
-                        Image(systemName: "info.circle.fill")
-                            .font(.system(size: 14))
-                            .foregroundColor(AppTheme.primary.opacity(0.7))
+                    HStack(spacing: 8) {
+                        Image(systemName: "eye.slash.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(AppTheme.textMuted)
                         
                         Text("App icons hidden for privacy")
-                            .font(.system(size: 13))
-                            .foregroundColor(AppTheme.textSecondary)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(AppTheme.textMuted)
                         
                         Spacer()
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(AppTheme.primary.opacity(0.08))
-                    .cornerRadius(12)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(AppTheme.muted.opacity(0.5))
+                    .cornerRadius(10)
                     
-                    // App tiles in a nice list
+                    // App tiles
                     let tokens = Array(shieldManager.selectedApplications)
                     ForEach(Array(tokens.enumerated()), id: \.element) { index, _ in
                         LockedAppRow(
                             index: index,
                             isLocked: shieldManager.isShieldActive
                         )
-                        .transition(.asymmetric(
-                            insertion: .scale(scale: 0.8).combined(with: .opacity),
-                            removal: .scale(scale: 0.8).combined(with: .opacity)
-                        ))
-                        .animation(
-                            .spring(response: 0.4, dampingFraction: 0.7)
-                                .delay(Double(index) * 0.05),
-                            value: shieldManager.selectedApplications
-                        )
                     }
                 }
             } else {
                 // Empty state
-                VStack(spacing: 12) {
+                VStack(spacing: 10) {
                     Image(systemName: "app.dashed")
-                        .font(.system(size: 40))
-                        .foregroundColor(AppTheme.textMuted.opacity(0.5))
+                        .font(.system(size: 36))
+                        .foregroundColor(AppTheme.textMuted.opacity(0.4))
                     
-                    Text("No apps selected yet")
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundColor(AppTheme.textSecondary)
-                    
-                    Text("Tap 'Change Selection' to choose apps")
-                        .font(.system(size: 13))
+                    Text("No apps selected")
+                        .font(.system(size: 14, weight: .medium))
                         .foregroundColor(AppTheme.textMuted)
-                        .multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 32)
+                .padding(.vertical, 28)
             }
             #endif
         }
-        .padding(24)
+        .padding(20)
         .background(AppTheme.card)
         .cornerRadius(20)
-        .shadow(color: Color.black.opacity(0.06), radius: 15, y: 8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 20)
+                .stroke(AppTheme.muted.opacity(0.3), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.04), radius: 12, y: 6)
     }
 
     private var progressCard: some View {
         Button(action: { showProgressView = true }) {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 14) {
+                // Header
                 HStack {
                     Text("Today's Progress")
-                        .font(.system(size: 20, weight: .bold))
+                        .font(.system(size: 17, weight: .bold))
                         .foregroundColor(AppTheme.textPrimary)
                     Spacer()
                     if userDataManager.currentStreak > 0 {
                         HStack(spacing: 4) {
                             Image(systemName: "flame.fill")
-                                .font(.system(size: 12))
+                                .font(.system(size: 11))
                                 .foregroundColor(AppTheme.accent)
                             Text("\(userDataManager.currentStreak)")
-                                .font(.system(size: 14, weight: .bold))
+                                .font(.system(size: 13, weight: .bold))
                                 .foregroundColor(AppTheme.accent)
                         }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(AppTheme.accent.opacity(0.15))
-                        .cornerRadius(12)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(AppTheme.accent.opacity(0.12))
+                        .cornerRadius(8)
                     }
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(AppTheme.textMuted)
                 }
                 
-                VStack(spacing: 12) {
-                    // Today's stats in a cleaner layout
-                    HStack(spacing: 20) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .font(.system(size: 14))
-                                    .foregroundColor(AppTheme.primary)
-                                Text("Today")
-                                    .font(.system(size: 13, weight: .medium))
-                                    .foregroundColor(AppTheme.textSecondary)
-                            }
+                // Stats Row
+                HStack(spacing: 16) {
+                    // Sessions stat
+                    HStack(spacing: 12) {
+                        ZStack {
+                            Circle()
+                                .fill(AppTheme.primary.opacity(0.1))
+                                .frame(width: 40, height: 40)
+                            Image(systemName: "hands.sparkles.fill")
+                                .font(.system(size: 16))
+                                .foregroundColor(AppTheme.primary)
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
                             Text("\(userDataManager.todaySessions)")
-                                .font(.system(size: 32, weight: .bold, design: .rounded))
+                                .font(.system(size: 22, weight: .bold, design: .rounded))
                                 .foregroundColor(AppTheme.textPrimary)
-                            Text("dhikr sessions")
-                                .font(.system(size: 12))
+                            Text("sessions")
+                                .font(.system(size: 11, weight: .medium))
                                 .foregroundColor(AppTheme.textMuted)
                         }
-                        
-                        Spacer()
-                        
-                        VStack(alignment: .trailing, spacing: 6) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "clock.fill")
-                                    .font(.system(size: 14))
-                                    .foregroundColor(AppTheme.accent)
-                                Text("Unlocked")
-                                    .font(.system(size: 13, weight: .medium))
-                                    .foregroundColor(AppTheme.textSecondary)
-                            }
+                    }
+                    
+                    Spacer()
+                    
+                    // Divider
+                    Rectangle()
+                        .fill(AppTheme.muted.opacity(0.3))
+                        .frame(width: 1, height: 36)
+                    
+                    Spacer()
+                    
+                    // Minutes stat
+                    HStack(spacing: 12) {
+                        ZStack {
+                            Circle()
+                                .fill(AppTheme.accent.opacity(0.1))
+                                .frame(width: 40, height: 40)
+                            Image(systemName: "clock.fill")
+                                .font(.system(size: 16))
+                                .foregroundColor(AppTheme.accent)
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
                             Text("\(userDataManager.todayMinutes)")
-                                .font(.system(size: 32, weight: .bold, design: .rounded))
+                                .font(.system(size: 22, weight: .bold, design: .rounded))
                                 .foregroundColor(AppTheme.textPrimary)
                             Text("minutes")
-                                .font(.system(size: 12))
+                                .font(.system(size: 11, weight: .medium))
                                 .foregroundColor(AppTheme.textMuted)
                         }
                     }
                 }
             }
-            .padding(24)
+            .padding(18)
             .background(AppTheme.card)
-            .cornerRadius(20)
-            .shadow(color: Color.black.opacity(0.06), radius: 15, y: 8)
+            .cornerRadius(18)
+            .overlay(
+                RoundedRectangle(cornerRadius: 18)
+                    .stroke(AppTheme.muted.opacity(0.3), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.04), radius: 10, y: 5)
         }
         .buttonStyle(PlainButtonStyle())
     }
@@ -677,7 +923,7 @@ struct ContentView: View {
                     .monospacedDigit()
                     .foregroundColor(.green)
             } else {
-                Text("Locked by default. Complete recitation to unlock 15 minutes.")
+                Text("Locked by default. Complete recitation to unlock \(userDataManager.difficultyLevel.displayDuration).")
                     .foregroundColor(.secondary)
             }
         }
@@ -702,13 +948,21 @@ struct ContentView: View {
         // Apply shield
         shieldManager.applyShield()
         
-        // Send immediate notification
-        notificationManager.scheduleUnlockExpiryNotification(expiresAt: Date())
+        // Show custom lock view (only if not manually dismissed)
+        if !customLockDismissed {
+            showCustomLock = true
+        }
         
-        // Schedule recurring alarm notifications (every 15 seconds for 30 minutes)
-        notificationManager.scheduleRecurringTimeExpiredNotifications()
+        // Cancel ALL old notifications first to avoid duplicates
+        notificationManager.cancelUnlockExpiryNotification()
+        notificationManager.cancelRecurringTimeExpiredNotifications()
+        notificationManager.cancelLockedAppReminders()
+        notificationManager.cancelLockedAppRemindersAfterTap()
         
-        debugPrint("✅ Lock reapplied! Shield active + recurring alarm notifications scheduled every 15s.")
+        // Schedule clean, consistent locked app reminders
+        notificationManager.scheduleLockedAppReminders()
+        
+        debugPrint("✅ Lock reapplied! Shield active + clean reminder notifications scheduled.")
     }
     
     // MARK: - Persistent Unlock State
@@ -773,19 +1027,19 @@ struct ContentView: View {
             isUnlockActive = false
             unlockEndsAt = nil
             
-            // CRITICAL: If shield is active, ensure reminder notifications are scheduled
-            // This fixes the issue where notifications stop after 45+ minutes
+            // CRITICAL: If shield is active, ensure clean reminder notifications are scheduled
+            // Cancel all old notifications first to avoid duplicates
             if shieldManager.isShieldActive {
-                UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
-                    let hasReminderNotifications = requests.contains { $0.identifier.starts(with: "locked_app_reminder_") }
-                    if !hasReminderNotifications {
-                        DispatchQueue.main.async {
-                            debugPrint("📅 Shield is active but no reminders found - re-scheduling now!")
-                            self.notificationManager.scheduleLockedAppReminders()
-                        }
-                    } else {
-                        debugPrint("✅ Reminder notifications already scheduled")
-                    }
+                // Cancel all old notifications to ensure clean state
+                notificationManager.cancelUnlockExpiryNotification()
+                notificationManager.cancelRecurringTimeExpiredNotifications()
+                notificationManager.cancelLockedAppReminders()
+                notificationManager.cancelLockedAppRemindersAfterTap()
+                
+                // Schedule fresh, clean reminders
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    debugPrint("📅 Shield is active - scheduling clean reminder notifications")
+                    self.notificationManager.scheduleLockedAppReminders()
                 }
             }
             
@@ -801,6 +1055,93 @@ struct ContentView: View {
         } else {
             return "\(remaining)s"
         }
+    }
+    
+    // Update custom lock view visibility
+    private func updateCustomLockView() {
+        // Don't show custom lock if user manually dismissed it
+        if customLockDismissed {
+            showCustomLock = false
+            return
+        }
+        
+        if shieldManager.isShieldActive && !isUnlockActive {
+            showCustomLock = true
+        } else {
+            showCustomLock = false
+            // Reset dismissed flag when shield is removed or unlock is active
+            customLockDismissed = false
+        }
+    }
+    
+    // Get unlock duration based on difficulty level
+    private var unlockDurationMinutes: Int {
+        return userDataManager.difficultyLevel.unlockDurationMinutes
+    }
+    
+    private var unlockDurationHours: Int {
+        return userDataManager.difficultyLevel.unlockDurationHours
+    }
+    
+    // Complete onboarding flow helper
+    private func completeOnboardingFlow() {
+        localStorage.completeOnboarding()
+        showHardPaywall = false
+        
+        // Show quick guide after brief delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            if !localStorage.hasSeenQuickGuide {
+                showQuickGuide = true
+            }
+        }
+    }
+    
+    // Check and show feedback popup if needed
+    private func checkAndShowFeedbackPopup(sessionCount: Int) {
+        debugPrint("📊 checkAndShowFeedbackPopup: sessionCount = \(sessionCount)")
+        
+        // First time: after 3 unlocks (only if not dismissed)
+        if sessionCount == 3 {
+            let isDismissed = UserDefaults.standard.bool(forKey: "feedback_dismissed")
+            debugPrint("📊 Session 3: dismissed = \(isDismissed)")
+            if !isDismissed {
+                debugPrint("📊 ✅ Showing feedback popup for session 3")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    self.showFeedback = true
+                }
+                return
+            } else {
+                debugPrint("📊 ❌ Feedback already dismissed for session 3")
+                return
+            }
+        }
+        
+        // After that: every 7 unlocks (10, 17, 24, 31, etc.)
+        // Check if session count is a milestone: 3, 10, 17, 24, 31, 38, etc.
+        // Formula: 3 + (n * 7) where n >= 1
+        if sessionCount > 3 {
+            let remainder = (sessionCount - 3) % 7
+            debugPrint("📊 Session \(sessionCount): remainder = \(remainder)")
+            if remainder == 0 {
+                // Check if we've already shown feedback for this exact milestone
+                let lastShownCount = UserDefaults.standard.integer(forKey: "feedback_last_shown_count")
+                debugPrint("📊 Last shown count: \(lastShownCount), current: \(sessionCount)")
+                if sessionCount > lastShownCount {
+                    // Reset dismissed flag for new milestone
+                    UserDefaults.standard.set(false, forKey: "feedback_dismissed")
+                    UserDefaults.standard.set(sessionCount, forKey: "feedback_last_shown_count")
+                    debugPrint("📊 ✅ Showing feedback popup for milestone \(sessionCount)")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        self.showFeedback = true
+                    }
+                    return
+                } else {
+                    debugPrint("📊 ❌ Feedback already shown for milestone \(sessionCount)")
+                }
+            }
+        }
+        
+        debugPrint("📊 ❌ Not showing feedback (not a milestone or already shown)")
     }
     
     private func colorScheme(for index: Int) -> ColorScheme? {

@@ -70,7 +70,7 @@ struct OnboardingView: View {
                         featureCard(
                             icon: "clock.fill",
                             title: "Mindful Time Limits",
-                            description: "Get 15 minutes of focused screen time. When it ends, alarms keep reminding you until you relock."
+                            description: "Get focused screen time based on your chosen difficulty level. When it ends, alarms keep reminding you until you relock."
                         )
                     }
                     .padding(.horizontal, 20)

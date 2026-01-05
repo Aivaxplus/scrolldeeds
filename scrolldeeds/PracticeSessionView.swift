@@ -63,15 +63,20 @@ struct PracticeSessionView: View {
     
     @StateObject private var audioRecorder = AudioRecorderManager()
     @StateObject private var webhookService = WebhookService()
+    @StateObject private var subscriptionManager = SubscriptionManager.shared
+    @ObservedObject var userDataManager: UserDataManager
     @State private var showVerificationSheet = false
     @State private var verificationMessage = ""
     @State private var selectedDhikr: DhikrType
     @State private var hasGrantedGraceUnlock = false
     @State private var shouldUnlockAfterAlert = false
+    @State private var showPaywall = false
+    @State private var hasCompletedFirstDhikr = false
     
     // Initialize with random dhikr
-    init(detector: RecitationDetector, onCompleted: @escaping () -> Void) {
+    init(detector: RecitationDetector, userDataManager: UserDataManager, onCompleted: @escaping () -> Void) {
         self.detector = detector
+        self.userDataManager = userDataManager
         self.onCompleted = onCompleted
         _selectedDhikr = State(initialValue: DhikrType.random())
     }
@@ -300,16 +305,34 @@ struct PracticeSessionView: View {
                 }
             }
         }
-        .alert("Verification Result", isPresented: $showVerificationSheet) {
-            Button("OK") {
-                if shouldUnlockAfterAlert {
-                    shouldUnlockAfterAlert = false
-                    onCompleted()
-                    dismiss()
-                }
+        .overlay {
+            if showVerificationSheet {
+                CustomAlertView(
+                    title: "Verification Result",
+                    message: verificationMessage,
+                    icon: verificationMessage.contains("✅") ? "checkmark.circle.fill" : verificationMessage.contains("⚠️") ? "exclamationmark.triangle.fill" : "xmark.circle.fill",
+                    iconColor: verificationMessage.contains("✅") ? .green : verificationMessage.contains("⚠️") ? .orange : .red,
+                    isPresented: $showVerificationSheet,
+                    primaryAction: {
+                        if shouldUnlockAfterAlert {
+                            shouldUnlockAfterAlert = false
+                            onCompleted()
+                            dismiss()
+                        }
+                    },
+                    primaryActionTitle: "OK"
+                )
             }
-        } message: {
-            Text(verificationMessage)
+        }
+        .fullScreenCover(isPresented: $showPaywall) {
+            HardPaywallView(onSubscribed: {
+                showPaywall = false
+                // User purchased - they need to manually press mic button again
+                // Show success message instead of auto-proceeding
+                HapticManager.shared.success()
+                verificationMessage = "🎉 JazakAllahu Khayran!\n\nYou're now a Premium member. Press the microphone button to start your dhikr and unlock your apps."
+                showVerificationSheet = true
+            })
         }
     }
     
@@ -372,8 +395,26 @@ struct PracticeSessionView: View {
             }
             
         } else {
-            // Start recording
+            // Check if user is premium before starting recording
+            if !subscriptionManager.isPremium {
+                // Show paywall for non-premium users
+                showPaywall = true
+                return
+            }
+            
+            // Start recording (only if premium)
             audioRecorder.startRecording()
+        }
+    }
+    
+    // Check premium status when paywall is dismissed
+    private func checkPremiumAndUnlock() {
+        if subscriptionManager.isPremium {
+            // User purchased premium - proceed with unlock
+            let level = UserDefaults.standard.string(forKey: "difficultyLevel").flatMap { DifficultyLevel(rawValue: $0) } ?? .medium
+            verificationMessage = "✅ Verified! Alhamdulillah\n\nYou've unlocked \(level.displayDuration). Remember: In the Akhira, you will be questioned about every second you waste."
+            shouldUnlockAfterAlert = true
+            showVerificationSheet = true
         }
     }
     
@@ -381,11 +422,26 @@ struct PracticeSessionView: View {
         switch result {
         case .approved:
             HapticManager.shared.dhikrVerified()
-            verificationMessage = "✅ Verified! Alhamdulillah\n\nYou've unlocked 15 minutes. Remember: In the Akhira, you will be questioned about every second you waste."
+            
+            // Mark that user has completed first dhikr
+            hasCompletedFirstDhikr = true
+            
+            // Check if user is premium - if not, show paywall
+            // ScrollDeeds has no free version, only a 1 month free trial for yearly subscription
+            if !subscriptionManager.isPremium {
+                showPaywall = true
+                return
+            }
+            
+            // Premium user - proceed with unlock
+            // Get duration from UserDefaults (fallback to medium if not set)
+            let level = UserDefaults.standard.string(forKey: "difficultyLevel").flatMap { DifficultyLevel(rawValue: $0) } ?? .medium
+            verificationMessage = "✅ Verified! Alhamdulillah\n\nYou've unlocked \(level.displayDuration). Remember: In the Akhira, you will be questioned about every second you waste."
             shouldUnlockAfterAlert = true
             showVerificationSheet = true
             
         case .rejected(let reason):
+            // Reason is already cleaned by WebhookService
             if !hasGrantedGraceUnlock {
                 hasGrantedGraceUnlock = true
                 HapticManager.shared.dhikrVerified()
@@ -399,14 +455,15 @@ struct PracticeSessionView: View {
             audioRecorder.deleteRecording()
             
         case .error(let error):
+            // Error messages are already user-friendly from WebhookService
             if !hasGrantedGraceUnlock {
                 hasGrantedGraceUnlock = true
                 HapticManager.shared.dhikrVerified()
-                verificationMessage = "⚠️ Verification failed: \(error)\n\nWe gave you a free pass so you can stay consistent. Next time, ensure your connection and pronunciation are clear."
+                verificationMessage = "⚠️ \(error)\n\nWe unlocked your apps this time so you can continue. Please try again next time."
                 shouldUnlockAfterAlert = true
             } else {
                 HapticManager.shared.error()
-                verificationMessage = "⚠️ Verification failed: \(error)\n\nCheck your connection and try again."
+                verificationMessage = "⚠️ \(error)\n\nPlease check your connection and try again."
             }
             showVerificationSheet = true
             audioRecorder.deleteRecording()
@@ -415,7 +472,7 @@ struct PracticeSessionView: View {
 }
 
 #Preview {
-    PracticeSessionView(detector: RecitationDetector(), onCompleted: {})
+    PracticeSessionView(detector: RecitationDetector(), userDataManager: UserDataManager(), onCompleted: {})
 }
 
 

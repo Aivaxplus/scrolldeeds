@@ -24,5 +24,7 @@
 	<array>
 		<string>com.scrolldeeds.app.shieldCheck</string>
 	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>
