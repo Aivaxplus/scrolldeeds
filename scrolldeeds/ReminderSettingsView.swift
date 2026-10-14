@@ -30,18 +30,18 @@ struct ReminderSettingsView: View {
                                     .foregroundColor(AppTheme.primary)
                                 
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text("Daily Dhikr Reminders")
+                                    Text(NSLocalizedString("reminders.title", comment: "Daily Dhikr Reminders"))
                                         .font(.system(size: 24, weight: .bold))
                                         .foregroundColor(AppTheme.textPrimary)
                                     
-                                    Text("Stay consistent with mindful unlocking")
+                                    Text(NSLocalizedString("reminders.subtitle", comment: "Stay consistent with mindful unlocking"))
                                         .font(.system(size: 14))
                                         .foregroundColor(AppTheme.textSecondary)
                                 }
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             
-                            Text("Set up to 3 daily reminders to practice dhikr and unlock your apps mindfully. You'll get a gentle notification to help build your habit.")
+                            Text(NSLocalizedString("reminders.description", comment: "Set up to 3 daily reminders to practice dhikr and unlock your apps mindfully. You'll get a gentle notification to help build your habit."))
                                 .font(.system(size: 15))
                                 .foregroundColor(AppTheme.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -57,11 +57,11 @@ struct ReminderSettingsView: View {
                                         .font(.system(size: 48))
                                         .foregroundColor(AppTheme.textMuted)
                                     
-                                    Text("No Reminders Set")
+                                    Text(NSLocalizedString("reminders.no_reminders", comment: "No Reminders Set"))
                                         .font(.system(size: 18, weight: .semibold))
                                         .foregroundColor(AppTheme.textSecondary)
                                     
-                                    Text("Add your first reminder to build a consistent dhikr habit")
+                                    Text(NSLocalizedString("reminders.add_first", comment: "Add your first reminder to build a consistent dhikr habit"))
                                         .font(.system(size: 14))
                                         .foregroundColor(AppTheme.textMuted)
                                         .multilineTextAlignment(.center)
@@ -116,7 +116,7 @@ struct ReminderSettingsView: View {
                                             .font(.system(size: 20))
                                             .foregroundColor(AppTheme.primary)
                                         
-                                        Text(reminderTimes.isEmpty ? "Add Your First Reminder" : "Add Another Reminder")
+                                        Text(reminderTimes.isEmpty ? NSLocalizedString("reminders.add_first_button", comment: "Add Your First Reminder") : NSLocalizedString("reminders.add_another", comment: "Add Another Reminder"))
                                             .font(.system(size: 16, weight: .semibold))
                                             .foregroundColor(AppTheme.textPrimary)
                                     }
@@ -131,7 +131,7 @@ struct ReminderSettingsView: View {
                                 }
                                 .padding(.horizontal, 20)
                             } else {
-                                Text("Maximum 3 reminders reached")
+                                Text(NSLocalizedString("reminders.max_reached", comment: "Maximum 3 reminders reached"))
                                     .font(.system(size: 14))
                                     .foregroundColor(AppTheme.textMuted)
                                     .padding(.vertical, 8)
@@ -145,7 +145,7 @@ struct ReminderSettingsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
+                    Button(NSLocalizedString("reminders.done", comment: "Done")) {
                         saveReminders()
                         dismiss()
                     }
@@ -160,11 +160,11 @@ struct ReminderSettingsView: View {
                         
                         VStack(spacing: 24) {
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("Choose Time")
+                                Text(NSLocalizedString("reminders.choose_time", comment: "Choose Time"))
                                     .font(.system(size: 20, weight: .bold))
                                     .foregroundColor(AppTheme.textPrimary)
                                 
-                                Text("Pick a time that works best for you")
+                                Text(NSLocalizedString("reminders.pick_time", comment: "Pick a time that works best for you"))
                                     .font(.system(size: 14))
                                     .foregroundColor(AppTheme.textSecondary)
                             }
@@ -184,18 +184,18 @@ struct ReminderSettingsView: View {
                             Spacer()
                         }
                     }
-                    .navigationTitle("Add Reminder")
+                    .navigationTitle(NSLocalizedString("reminders.add_reminder", comment: "Add Reminder"))
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .navigationBarLeading) {
-                            Button("Cancel") {
+                            Button(NSLocalizedString("common.cancel", comment: "Cancel")) {
                                 showingAddTime = false
                             }
                             .foregroundColor(AppTheme.textSecondary)
                         }
                         
                         ToolbarItem(placement: .navigationBarTrailing) {
-                            Button("Add") {
+                            Button(NSLocalizedString("reminders.add", comment: "Add")) {
                                 HapticManager.shared.reminderAdded()
                                 reminderTimes.append(newReminderTime)
                                 showingAddTime = false
@@ -233,7 +233,7 @@ struct ReminderSettingsView: View {
     }
     
     private func removeReminder(at index: Int) {
-        withAnimation {
+        _ = withAnimation {
             reminderTimes.remove(at: index)
         }
     }

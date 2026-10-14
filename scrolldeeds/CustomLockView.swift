@@ -1,235 +1,193 @@
 //
 //  CustomLockView.swift
 //
-//  Premium custom lock view in ScrollDeeds app style
+//  Quiet lock page: Nafsi character, earn coins, or buy hearts.
 //
 
 import SwiftUI
 
 struct CustomLockView: View {
-    @ObservedObject private var shieldManager = ShieldManager.shared
-    @ObservedObject var userDataManager: UserDataManager
-    @StateObject private var notificationManager = NotificationManager.shared
-    @StateObject private var subscriptionManager = SubscriptionManager.shared
+    @ObservedObject private var subscriptionManager = SubscriptionManager.shared
     @State private var showDhikr = false
-    @State private var pulseAnimation = false
+    @State private var appeared = false
     var onUnlock: (() -> Void)? = nil
     var onDismiss: (() -> Void)? = nil
-    
+    var onRequiresUpgrade: (() -> Void)? = nil
+    var onBuyHearts: (() -> Void)? = nil
+
     var body: some View {
         ZStack {
-            // Rich gradient background
-            LinearGradient(
-                colors: [
-                    Color(red: 0.14, green: 0.42, blue: 0.28),
-                    Color(red: 0.10, green: 0.32, blue: 0.22),
-                    Color(red: 0.08, green: 0.24, blue: 0.16)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-            
-            // Subtle pattern
-            GeometryReader { geo in
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [
-                                Color.white.opacity(0.08),
-                                Color.clear
-                            ],
-                            center: .center,
-                            startRadius: 0,
-                            endRadius: geo.size.width * 0.5
-                        )
-                    )
-                    .frame(width: geo.size.width, height: geo.size.width)
-                    .position(x: geo.size.width / 2, y: geo.size.height * 0.35)
-            }
-            
-            // Close button
-            VStack {
+            SDPageBackground()
+
+            VStack(spacing: 0) {
                 HStack {
                     Spacer()
-                    Button(action: {
-                        HapticManager.shared.soft()
-                        onDismiss?()
-                    }) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.white.opacity(0.5))
-                            .frame(width: 32, height: 32)
-                            .background(Color.white.opacity(0.1))
-                            .clipShape(Circle())
-                    }
-                    .padding(.top, 16)
-                    .padding(.trailing, 20)
-                }
-                Spacer()
-            }
-            
-            VStack(spacing: 0) {
-                Spacer()
-                
-                // Lock Icon with Premium Animation
-                ZStack {
-                    // Outer glow rings
-                    ForEach(0..<3) { i in
-                        Circle()
-                            .stroke(Color.white.opacity(0.08 - Double(i) * 0.02), lineWidth: 1.5)
-                            .frame(width: CGFloat(100 + i * 30), height: CGFloat(100 + i * 30))
-                            .scaleEffect(pulseAnimation ? 1.1 : 1.0)
-                            .animation(
-                                .easeInOut(duration: 2.0)
-                                .repeatForever(autoreverses: true)
-                                .delay(Double(i) * 0.2),
-                                value: pulseAnimation
-                            )
-                    }
-                    
-                    // Inner glow
-                    Circle()
-                        .fill(Color.white.opacity(0.1))
-                        .frame(width: 80, height: 80)
-                        .blur(radius: 10)
-                    
-                    // Main icon background
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [Color.white.opacity(0.2), Color.white.opacity(0.08)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 72, height: 72)
-                    
-                    // Lock icon
-                    Image(systemName: "lock.fill")
-                        .font(.system(size: 32, weight: .semibold))
-                        .foregroundColor(.white)
-                }
-                .frame(height: 180)
-                .padding(.bottom, 20)
-                
-                // Title and Message
-                VStack(spacing: 14) {
-                    Text("Apps Locked")
-                        .font(.system(size: 30, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                    
-                    Text("Complete 3 dhikr recitations to\nunlock for \(userDataManager.difficultyLevel.displayDuration)")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.white.opacity(0.8))
-                        .multilineTextAlignment(.center)
-                        .lineSpacing(4)
-                }
-                .padding(.bottom, 36)
-                
-                // Action Button
-                Button(action: {
-                    HapticManager.shared.medium()
-                    showDhikr = true
-                }) {
-                    HStack(spacing: 12) {
-                        Image(systemName: "mic.fill")
-                            .font(.system(size: 18, weight: .semibold))
-                        Text("Start Dhikr")
-                            .font(.system(size: 18, weight: .bold))
-                    }
-                    .foregroundColor(Color(red: 0.14, green: 0.42, blue: 0.28))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 18)
-                    .background(
-                        LinearGradient(
-                            colors: [.white, Color(red: 0.95, green: 0.97, blue: 0.95)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
+                    PaywallCloseButton(
+                        iconColor: UIColor(AppTheme.textMuted),
+                        backgroundColor: UIColor(AppTheme.card),
+                        action: { onDismiss?() }
                     )
-                    .cornerRadius(16)
-                    .shadow(color: Color.black.opacity(0.2), radius: 16, y: 8)
+                    .frame(width: 32, height: 32)
+                    .contentShape(Rectangle())
                 }
-                .padding(.horizontal, 32)
-                
-                Spacer()
-                
-                // Footer info
-                VStack(spacing: 12) {
-                    HStack(spacing: 20) {
-                        InfoBadge(icon: "sparkles", text: "3 recitations")
-                        InfoBadge(icon: "clock", text: userDataManager.difficultyLevel.displayDuration)
+                .padding(.horizontal, 20)
+                .padding(.top, 10)
+
+                Spacer(minLength: 24)
+
+                VStack(spacing: 26) {
+                    VStack(spacing: 16) {
+                        WeakNafsiLockArt()
+                            .scaleEffect(appeared ? 1 : 0.94)
+
+                        emptyHeartsFrame
                     }
-                    
-                    Text("Mindful moments lead to intentional choices")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.white.opacity(0.4))
-                        .italic()
+
+                    VStack(spacing: 10) {
+                        Text(NSLocalizedString("lock.title", comment: "Your apps are locked"))
+                            .font(.system(size: 28, weight: .bold, design: .rounded))
+                            .foregroundColor(AppTheme.textPrimary)
+                            .multilineTextAlignment(.center)
+
+                        Text(NSLocalizedString("lock.unlock_message", comment: "Nafsi has no hearts and needs them refilled"))
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(AppTheme.textSecondary)
+                            .multilineTextAlignment(.center)
+                            .lineSpacing(3)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.horizontal, 32)
+
+                    if subscriptionManager.hasLapsedAccess {
+                        Text(NSLocalizedString("access.expired.lock_note", comment: "Your access has ended — reactivate to unlock."))
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(AppTheme.textSecondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 32)
+                    }
                 }
-                .padding(.bottom, 44)
+                .opacity(appeared ? 1 : 0)
+                .offset(y: appeared ? 0 : 10)
+
+                Spacer(minLength: 24)
+
+                VStack(spacing: 10) {
+                    Button(action: startDeed) {
+                        Text(NSLocalizedString("deed.cta", comment: "Earn coins"))
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+
+                    Button {
+                        HapticManager.shared.soft()
+                        onBuyHearts?()
+                    } label: {
+                        Text(NSLocalizedString("nafsi.hearts.buy", comment: "Buy hearts"))
+                    }
+                    .buttonStyle(SecondaryButtonStyle())
+                }
+                .padding(.horizontal, 28)
+                .padding(.bottom, 28)
             }
         }
         .onAppear {
-            pulseAnimation = true
+            withAnimation(.easeOut(duration: 0.5)) { appeared = true }
         }
-        .sheet(isPresented: $showDhikr) {
-            PracticeSessionView(detector: RecitationDetector(), userDataManager: userDataManager) {
-                // On completion: unlock apps (only if premium)
-                guard subscriptionManager.isPremium else {
-                    // User is not premium - unlock should not happen
-                    return
-                }
-                
-                HapticManager.shared.appsUnlocked()
-                shieldManager.removeShield()
-                
-                // Set unlock time based on difficulty level
-                let minutes = userDataManager.difficultyLevel.unlockDurationMinutes
-                let end = Date().addingTimeInterval(TimeInterval(minutes * 60))
-                shieldManager.setUnlockEndTime(end)
-                
-                // Cancel old notifications
-                notificationManager.cancelUnlockExpiryNotification()
-                notificationManager.cancelRecurringTimeExpiredNotifications()
-                notificationManager.cancelLockedAppReminders()
-                
-                // Schedule new notification
-                notificationManager.scheduleUnlockExpiryNotification(expiresAt: end)
-                
-                // Track analytics
-                AnalyticsManager.shared.trackSessionCompleted()
-                
-                // Close dhikr view
+        .fullScreenCover(isPresented: $showDhikr) {
+            PracticeSessionView(detector: RecitationDetector()) {
                 showDhikr = false
-                
-                // Call unlock callback to update ContentView
                 onUnlock?()
             }
         }
+        .trackScreen(AnalyticsScreen.lock)
+    }
+
+    private func startDeed() {
+        HapticManager.shared.medium()
+        // Match dashboard `startDeedFlow`: show paywall immediately when access is gone.
+        // Do not block the tap on a network refresh (that felt like “nothing happens”).
+        if subscriptionManager.hasPremiumAccess {
+            showDhikr = true
+            Task { @MainActor in
+                guard await subscriptionManager.refreshPremiumStatus() else {
+                    showDhikr = false
+                    onRequiresUpgrade?()
+                    return
+                }
+            }
+            return
+        }
+        onRequiresUpgrade?()
+    }
+
+    /// Five empty hearts, so the lock reads as an empty tank.
+    private var emptyHeartsFrame: some View {
+        HStack(spacing: 12) {
+            ForEach(0..<5, id: \.self) { _ in
+                Image(systemName: "heart")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(AppTheme.textMuted.opacity(0.72))
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(AppTheme.card)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(AppTheme.border.opacity(0.6), lineWidth: 1)
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            String(format: NSLocalizedString("nafsi.hearts.count", comment: "%d of %d hearts"), 0, 5)
+        )
     }
 }
 
-// MARK: - Info Badge
-struct InfoBadge: View {
-    let icon: String
-    let text: String
-    
+/// Drained Nafsi: a red outline that fades outward while the figure pulses.
+private struct WeakNafsiLockArt: View {
+    @State private var pulse = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private let outline = Color(red: 0.86, green: 0.15, blue: 0.18)
+
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.system(size: 12, weight: .semibold))
-            Text(text)
-                .font(.system(size: 12, weight: .semibold))
+        ZStack {
+            silhouette
+                .blur(radius: pulse ? 20 : 7)
+                .opacity(pulse ? 0.08 : 0.62)
+                .scaleEffect(pulse ? 1.09 : 1.03)
+
+            silhouette
+                .blur(radius: pulse ? 5 : 1.2)
+                .opacity(pulse ? 0.16 : 0.9)
+                .scaleEffect(pulse ? 1.05 : 1.015)
+
+            Image("NafsiPoseWeak")
+                .resizable()
+                .scaledToFit()
+                .scaleEffect(pulse ? 1.04 : 0.985)
         }
-        .foregroundColor(.white.opacity(0.7))
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color.white.opacity(0.1))
-        .cornerRadius(20)
+        .frame(height: 196)
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 1.45).repeatForever(autoreverses: true)) {
+                pulse = true
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    private var silhouette: some View {
+        Image("NafsiPoseWeak")
+            .renderingMode(.template)
+            .resizable()
+            .scaledToFit()
+            .foregroundStyle(outline)
     }
 }
 
 #Preview {
-    CustomLockView(userDataManager: UserDataManager(), onUnlock: nil, onDismiss: nil)
+    CustomLockView(onUnlock: nil, onDismiss: nil)
 }

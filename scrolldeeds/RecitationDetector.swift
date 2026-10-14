@@ -21,10 +21,10 @@ final class RecitationDetector: ObservableObject {
     @Published var isListening: Bool = false
     @Published var lastTranscript: String = ""
 
-    private let audioEngine = AVAudioEngine()
+    private var audioEngine: AVAudioEngine?
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
-    private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+    private var recognizer: SFSpeechRecognizer?
     private var target: Target = .alhamdulillah
     private var goalCount: Int = 3
 
@@ -43,14 +43,18 @@ final class RecitationDetector: ObservableObject {
         guard let request = request else { throw NSError(domain: "Recitation", code: 1) }
         request.shouldReportPartialResults = true
 
-        let inputNode = audioEngine.inputNode
+        let engine = AVAudioEngine()
+        audioEngine = engine
+        recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+
+        let inputNode = engine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
             self?.request?.append(buffer)
         }
 
-        audioEngine.prepare()
-        try audioEngine.start()
+        engine.prepare()
+        try engine.start()
         isListening = true
 
         recognitionTask = recognizer?.recognitionTask(with: request) { [weak self] result, error in
@@ -67,10 +71,12 @@ final class RecitationDetector: ObservableObject {
     }
 
     func stop() {
-        if audioEngine.isRunning {
-            audioEngine.stop()
-            audioEngine.inputNode.removeTap(onBus: 0)
+        if let engine = audioEngine, engine.isRunning {
+            engine.stop()
+            engine.inputNode.removeTap(onBus: 0)
         }
+        audioEngine = nil
+        recognizer = nil
         request?.endAudio()
         recognitionTask?.cancel()
         recognitionTask = nil

@@ -2,11 +2,10 @@
 //  AnalyticsManager.swift
 //  scrolldeeds
 //
-//  Analytics tracking with TelemetryDeck for retention & funnel analysis
+//  Analytics tracking for retention & funnel analysis
 //
 
 import Foundation
-import TelemetryDeck
 
 class AnalyticsManager {
     static let shared = AnalyticsManager()
@@ -65,161 +64,256 @@ class AnalyticsManager {
             defaults.set(true, forKey: weekCheckKey)
             
             debugPrint("📊 Analytics: Week retention check - Active: \(isActive)")
-            
-            // Send to TelemetryDeck (if configured)
-            sendTelemetryDeckEvent(name: "week_retention", parameters: [
-                "is_active": isActive ? "true" : "false",
-                "days_since_launch": "7"
-            ])
         }
     }
     
     // Track session completion
     func trackSessionCompleted() {
-        sendTelemetryDeckEvent(name: "session_completed", parameters: [:])
+        // Analytics: implement when you add a provider (e.g. PostHog)
+    }
+    
+    // MARK: - Trial Tracking
+    
+    func trackFreeTrialStarted() {
+        debugPrint("📊 Analytics: Free trial started")
     }
     
     // MARK: - Onboarding Funnel Tracking
     
-    /// Call when onboarding starts
+    private var stepStartTimes: [Int: Date] = [:]
+    private var totalSteps: Int = 0
+    /// Guards against the same step firing twice on re-render.
+    private var trackedStepIdentifiers: Set<String> = []
+    private var hasTrackedOnboardingCompleted = false
+    
+    /// Call when onboarding starts. Fires at most once per questionnaire run, because
+    /// SwiftUI can re-run `onAppear` on the same view.
     func trackOnboardingStarted() {
+        guard onboardingStartTime == nil else {
+            debugPrint("📊 Onboarding: Started already tracked, skipping duplicate")
+            return
+        }
         onboardingStartTime = Date()
         lastStepTime = Date()
-        sendTelemetryDeckEvent(name: "onboarding_started", parameters: [:])
+        stepStartTimes = [:]
+        stepStartTimes[0] = Date()
+        trackedStepIdentifiers = []
         debugPrint("📊 Onboarding: Started")
+        PostHogManager.shared.trackOnboardingStarted()
     }
     
     /// Call when user views a step
-    func trackOnboardingStep(step: Int, stepName: String, stepType: String) {
-        let now = Date()
-        var timeOnPreviousStep: Double = 0
-        
-        if let lastTime = lastStepTime {
-            timeOnPreviousStep = now.timeIntervalSince(lastTime)
+    func trackOnboardingStep(step: Int, stepName: String, stepType: String, totalSteps: Int, stepIdentifier: String) {
+        // A step can be re-rendered (auto-advance timers, animations) without being a new view.
+        guard !trackedStepIdentifiers.contains(stepIdentifier) else {
+            debugPrint("📊 Onboarding: Step \(stepIdentifier) already tracked, skipping duplicate")
+            return
         }
+        trackedStepIdentifiers.insert(stepIdentifier)
+
+        let now = Date()
+        self.totalSteps = totalSteps
+        
+        // Calculate time on previous step
+        var timeOnPreviousStep: Double = 0
+        if step > 0, let previousStepStart = stepStartTimes[step - 1] {
+            timeOnPreviousStep = now.timeIntervalSince(previousStepStart)
+        }
+        
+        // Store start time for this step
+        stepStartTimes[step] = now
         lastStepTime = now
         
-        sendTelemetryDeckEvent(name: "onboarding_step_viewed", parameters: [
-            "step_number": "\(step)",
-            "step_name": stepName,
-            "step_type": stepType,
-            "time_on_previous_step": "\(Int(timeOnPreviousStep))"
-        ])
-        debugPrint("📊 Onboarding: Step \(step) - \(stepName) (type: \(stepType))")
+        debugPrint("📊 Onboarding: Step \(step)/\(totalSteps) - \(stepName) (type: \(stepType), prev: \(Int(timeOnPreviousStep))s, identifier: \(stepIdentifier))")
+        PostHogManager.shared.trackOnboardingStep(
+            step: step,
+            stepName: stepName,
+            stepType: stepType,
+            stepIdentifier: stepIdentifier,
+            totalSteps: totalSteps,
+            timeOnPreviousStep: timeOnPreviousStep
+        )
     }
     
-    /// Call when user answers a question
-    func trackOnboardingAnswer(step: Int, stepName: String, answerIndex: Int, answerText: String) {
-        sendTelemetryDeckEvent(name: "onboarding_answer", parameters: [
-            "step_number": "\(step)",
-            "step_name": stepName,
-            "answer_index": "\(answerIndex)",
-            "answer_text": answerText
-        ])
-        debugPrint("📊 Onboarding: Answer at step \(step) - \(answerText)")
+    /// Call when user goes back to previous step
+    func trackOnboardingBackPressed(fromStep: Int, stepName: String) {
+        let timeOnStep: Double
+        if let stepStart = stepStartTimes[fromStep] {
+            timeOnStep = Date().timeIntervalSince(stepStart)
+            debugPrint("📊 Onboarding: Back pressed from step \(fromStep) - \(stepName) (time on step: \(Int(timeOnStep))s)")
+        } else {
+            debugPrint("📊 Onboarding: Back pressed from step \(fromStep) - \(stepName)")
+        }
+    }
+    
+    /// Call when user answers a question.
+    /// - Parameter answerText: must be the English label the user saw, never a raw enum key.
+    func trackOnboardingAnswer(
+        step: Int,
+        stepName: String,
+        stepIdentifier: String,
+        answerIndex: Int,
+        answerText: String,
+        selectionSource: String = "manual"
+    ) {
+        var timeToAnswer: Double = 0
+        if let stepStart = stepStartTimes[step] {
+            timeToAnswer = Date().timeIntervalSince(stepStart)
+        }
+        
+        debugPrint("📊 Onboarding: Answer at step \(step) [\(stepIdentifier)] - \(answerText) (took \(Int(timeToAnswer))s)")
+        PostHogManager.shared.trackOnboardingAnswer(
+            step: step,
+            stepName: stepName,
+            stepIdentifier: stepIdentifier,
+            answerIndex: answerIndex,
+            answerText: answerText,
+            timeToAnswerSeconds: timeToAnswer,
+            selectionSource: selectionSource
+        )
     }
     
     /// Call when user makes a commitment
-    func trackOnboardingCommitment(step: Int, stepName: String, committed: Bool) {
-        sendTelemetryDeckEvent(name: "onboarding_commitment", parameters: [
-            "step_number": "\(step)",
+    func trackOnboardingCommitment(step: Int, stepName: String, stepIdentifier: String, committed: Bool) {
+        var timeToCommit: Double = 0
+        if let stepStart = stepStartTimes[step] {
+            timeToCommit = Date().timeIntervalSince(stepStart)
+        }
+        
+        debugPrint("📊 Onboarding: Commitment at step \(step) - \(committed) (took \(Int(timeToCommit))s)")
+        PostHogManager.shared.track("Onboarding Commitment Selected", properties: [
+            "step_number": step,
             "step_name": stepName,
-            "committed": committed ? "true" : "false"
+            "step_identifier": stepIdentifier,
+            "answer_selected": committed ? "Accepted" : "Not accepted",
+            "committed": committed,
+            "time_to_answer_seconds": timeToCommit
         ])
-        debugPrint("📊 Onboarding: Commitment at step \(step) - \(committed)")
     }
     
-    /// Call when onboarding is completed
-    func trackOnboardingCompleted(totalSteps: Int, appsSelected: Int, difficultyLevel: String) {
+    /// Call when user selects apps to lock
+    func trackOnboardingAppsSelected(count: Int, skipped: Bool) {
+        debugPrint("📊 Onboarding: Apps selected - \(count) (skipped: \(skipped))")
+        PostHogManager.shared.track("Onboarding Apps Selected", properties: [
+            "apps_selected": count,
+            "skipped": skipped,
+            "answer_selected": skipped ? "Skipped" : "\(count) apps"
+        ])
+    }
+    
+    /// Call when user selects difficulty level.
+    /// - Parameters:
+    ///   - level: canonical English label from `AnalyticsAnswerLabel.difficulty`.
+    ///   - source: where the choice was made — `onboarding`, `post_subscribe` or `settings`.
+    func trackOnboardingDifficultySelected(level: String, unlockMinutes: Int, source: String) {
+        debugPrint("📊 Difficulty selected - \(level) (\(unlockMinutes) min, source: \(source))")
+        PostHogManager.shared.track("Onboarding Difficulty Selected", properties: [
+            "difficulty_level": level,
+            "unlock_duration": "\(unlockMinutes) min",
+            "unlock_minutes": unlockMinutes,
+            "answer_selected": level,
+            "source": source
+        ])
+    }
+    
+    /// Call when permission is requested
+    func trackOnboardingPermissionRequested(type: String, granted: Bool) {
+        debugPrint("📊 Onboarding: Permission \(type) - \(granted ? "granted" : "denied")")
+        PostHogManager.shared.track("Onboarding Permission Requested", properties: [
+            "permission_type": type,
+            "granted": granted
+        ])
+    }
+    
+    /// Call when onboarding is completed. Fires at most once per run.
+    func trackOnboardingCompleted(totalSteps: Int, appsSelected: Int) {
+        guard !hasTrackedOnboardingCompleted else {
+            debugPrint("📊 Onboarding: Completed already tracked, skipping duplicate")
+            return
+        }
+        hasTrackedOnboardingCompleted = true
+
         var totalTime: Double = 0
         if let startTime = onboardingStartTime {
             totalTime = Date().timeIntervalSince(startTime)
         }
-        
-        sendTelemetryDeckEvent(name: "onboarding_completed", parameters: [
-            "total_steps": "\(totalSteps)",
-            "total_time_seconds": "\(Int(totalTime))",
-            "apps_selected": "\(appsSelected)",
-            "difficulty_level": difficultyLevel
-        ])
-        debugPrint("📊 Onboarding: Completed in \(Int(totalTime))s")
-        
-        // Reset
+        let difficulty = AnalyticsAnswerLabel.difficulty(level: UserDataManager.shared.onboardingDifficultyLevel)
+        debugPrint("📊 Onboarding: Completed in \(Int(totalTime))s, difficulty \(difficulty)")
+        PostHogManager.shared.trackOnboardingCompleted(
+            totalSteps: totalSteps,
+            totalTimeSeconds: totalTime,
+            appsSelected: appsSelected,
+            difficultyLevel: difficulty
+        )
+        MetaEventsManager.shared.trackOnboardingCompleted()
         onboardingStartTime = nil
         lastStepTime = nil
+        stepStartTimes = [:]
+        trackedStepIdentifiers = []
     }
     
-    /// Call when user abandons onboarding (closes app)
-    func trackOnboardingAbandoned(atStep: Int, stepName: String) {
-        var totalTime: Double = 0
+    /// Call when user abandons onboarding (closes app or leaves flow).
+    func trackOnboardingAbandoned(atStep: Int, stepName: String, stepIdentifier: String, totalSteps: Int) {
+        // Leaving the questionnaire after finishing it is not abandonment.
+        guard !hasTrackedOnboardingCompleted else { return }
+
+        let totalTime: Double
         if let startTime = onboardingStartTime {
             totalTime = Date().timeIntervalSince(startTime)
+        } else {
+            totalTime = 0
         }
         
-        sendTelemetryDeckEvent(name: "onboarding_abandoned", parameters: [
-            "abandoned_at_step": "\(atStep)",
-            "step_name": stepName,
-            "total_time_seconds": "\(Int(totalTime))"
-        ])
-        debugPrint("📊 Onboarding: Abandoned at step \(atStep) - \(stepName)")
+        let progressPercent = totalSteps > 0 ? (Double(atStep) / Double(totalSteps)) * 100 : 0
+        debugPrint("📊 Onboarding: Abandoned at step \(atStep) - \(stepName) (\(Int(progressPercent))% complete, \(Int(totalTime))s total)")
+        PostHogManager.shared.trackOnboardingAbandoned(
+            atStep: atStep,
+            stepName: stepName,
+            stepIdentifier: stepIdentifier,
+            totalSteps: totalSteps,
+            progressPercent: progressPercent,
+            totalTimeSeconds: totalTime
+        )
     }
     
     // MARK: - Paywall Funnel Tracking
     
     /// Call when soft paywall is shown
     func trackSoftPaywallShown() {
-        sendTelemetryDeckEvent(name: "soft_paywall_shown", parameters: [:])
+        // Analytics: implement when you add a provider
     }
     
     /// Call when soft paywall is skipped
     func trackSoftPaywallSkipped() {
-        sendTelemetryDeckEvent(name: "soft_paywall_skipped", parameters: [:])
+        // Analytics: implement when you add a provider
     }
     
     /// Call when hard paywall is shown
     func trackHardPaywallShown() {
-        sendTelemetryDeckEvent(name: "hard_paywall_shown", parameters: [:])
+        MetaEventsManager.shared.trackPaywallViewed()
     }
     
     /// Call when purchase is attempted
     func trackPurchaseAttempted(productId: String, isYearly: Bool) {
-        sendTelemetryDeckEvent(name: "purchase_attempted", parameters: [
-            "product_id": productId,
-            "is_yearly": isYearly ? "true" : "false"
-        ])
+        let plan: String
+        if productId.lowercased().contains("weekly") {
+            plan = "weekly"
+        } else if isYearly {
+            plan = "yearly"
+        } else {
+            plan = "monthly"
+        }
+        MetaEventsManager.shared.trackInitiatedCheckout(productId: productId, plan: plan)
     }
     
     /// Call when purchase succeeds
     func trackPurchaseCompleted(productId: String, isYearly: Bool) {
-        sendTelemetryDeckEvent(name: "purchase_completed", parameters: [
-            "product_id": productId,
-            "is_yearly": isYearly ? "true" : "false"
-        ])
+        // Analytics: implement when you add a provider
     }
     
     /// Call when purchase fails
     func trackPurchaseFailed(productId: String, error: String) {
-        sendTelemetryDeckEvent(name: "purchase_failed", parameters: [
-            "product_id": productId,
-            "error": error
-        ])
-    }
-    
-    // Send event to TelemetryDeck
-    private func sendTelemetryDeckEvent(name: String, parameters: [String: String]) {
-        // TelemetryDeck signal with parameters
-        // Parameters are sent as a dictionary
-        if parameters.isEmpty {
-            TelemetryDeck.signal(name)
-        } else {
-            // Convert String:String dict to [String: String] for TelemetryDeck
-            var signalParams: [String: String] = [:]
-            for (key, value) in parameters {
-                signalParams[key] = value
-            }
-            TelemetryDeck.signal(name, parameters: signalParams)
-        }
-        debugPrint("📊 TelemetryDeck: Event '\(name)' sent with params: \(parameters)")
+        // Analytics: implement when you add a provider
     }
     
     // Get retention status (for debugging/admin)

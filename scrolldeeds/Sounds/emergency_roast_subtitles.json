@@ -1,0 +1,39 @@
+{
+  "cues": [
+    {
+      "start": 0.0,
+      "end": 3.0,
+      "text": "You really sat there scrolling like that?"
+    },
+    {
+      "start": 3.0,
+      "end": 9.0,
+      "text": "Let me tell you something, you are cooked."
+    },
+    {
+      "start": 9.0,
+      "end": 14.0,
+      "text": "You're not even enjoying it anymore, just scrolling out of habit."
+    },
+    {
+      "start": 14.0,
+      "end": 19.0,
+      "text": "You know this isn't worth your time, but you still chose it."
+    },
+    {
+      "start": 19.0,
+      "end": 24.0,
+      "text": "And now you're back like, yeah, let me lock my apps."
+    },
+    {
+      "start": 24.0,
+      "end": 26.0,
+      "text": "Damage already done, buddy."
+    },
+    {
+      "start": 26.0,
+      "end": 35.0,
+      "text": "You could have said Subhanallah 100 times by now, but here we are."
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+/* Localized Info.plist strings — French */
+"NSCameraUsageDescription" = "Nafsi utilise la caméra pour éteindre le Fajr en photographiant l’objet que tu as choisi.";
+"NSAlarmKitUsageDescription" = "Nafsi programme une vraie alarme Fajr pour te réveiller même en mode silencieux. Photographie ton objet pour l’éteindre.";
+"NSUserTrackingUsageDescription" = "Nafsi utilise ceci pour mesurer les installations via les publicités et améliorer notre marketing. Vous pouvez modifier ce choix à tout moment dans Réglages.";

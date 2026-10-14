@@ -58,7 +58,7 @@ struct FeedbackView: View {
                     // Star icon
                     Image(systemName: "star.fill")
                         .font(.system(size: 40, weight: .semibold))
-                        .foregroundColor(AppTheme.primary)
+                        .foregroundColor(AppTheme.starYellow)
                         .rotationEffect(.degrees(animateStars ? 360 : 0))
                 }
                 .onAppear {
@@ -69,12 +69,12 @@ struct FeedbackView: View {
                 
                 VStack(spacing: 12) {
                     // Title
-                    Text("Loving ScrollDeeds?")
+                    Text(NSLocalizedString("feedback.title", comment: "Loving ScrollDeeds?"))
                         .font(.system(size: 28, weight: .bold, design: .rounded))
                         .foregroundColor(AppTheme.textPrimary)
                     
                     // Description
-                    Text("Your feedback helps us improve and reach more people who need mindful screen time.")
+                    Text(NSLocalizedString("feedback.description", comment: "Your feedback helps us improve and reach more people who need mindful screen time."))
                         .font(.system(size: 16, weight: .regular))
                         .foregroundColor(AppTheme.textSecondary)
                         .multilineTextAlignment(.center)
@@ -95,7 +95,7 @@ struct FeedbackView: View {
                         HStack(spacing: 12) {
                             Image(systemName: "star.fill")
                                 .font(.system(size: 18, weight: .semibold))
-                            Text("Rate on App Store")
+                            Text(NSLocalizedString("feedback.rate", comment: "Rate on App Store"))
                                 .font(.system(size: 17, weight: .bold))
                         }
                         .foregroundColor(.white)
@@ -127,7 +127,7 @@ struct FeedbackView: View {
                             isPresented = false
                         }
                     }) {
-                        Text("Maybe Later")
+                        Text(NSLocalizedString("feedback.later", comment: "Maybe Later"))
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundColor(AppTheme.textSecondary)
                             .frame(maxWidth: .infinity)

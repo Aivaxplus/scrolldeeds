@@ -31,6 +31,9 @@ class WebhookService: ObservableObject {
     // Production n8n webhook URL
     private let webhookURL = "https://aivaxplus.app.n8n.cloud/webhook/7feb29f5-1a33-47f0-a8c7-9397e2d91e75"
     
+    // Tracking webhook URL for dhikr analytics
+    private let trackingWebhookURL = "https://hook.eu1.make.com/m6k2k3vwgrpzqgnnnynlyojbvrjl4rmb"
+    
     func verifyDhikrRecording(audioData: Data, dhikrType: String, completion: @escaping (VerificationResult) -> Void) {
         isVerifying = true
         verificationResult = nil
@@ -299,6 +302,54 @@ class WebhookService: ObservableObject {
         }
         
         return cleaned
+    }
+    
+    // MARK: - Tracking Webhook
+    
+    /// Send tracking webhook when dhikr is completed successfully
+    /// This is fire-and-forget - doesn't block the user experience
+    func trackDhikrCompletion(dhikrType: String) {
+        guard let url = URL(string: trackingWebhookURL) else {
+            debugPrint("WebhookService: Invalid tracking webhook URL")
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 10 // Short timeout - fire and forget
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // Create JSON payload
+        let formatter = ISO8601DateFormatter()
+        let payload: [String: Any] = [
+            "event": "dhikr_completed",
+            "dhikr_type": dhikrType,
+            "timestamp": Date().timeIntervalSince1970,
+            "date": formatter.string(from: Date())
+        ]
+        
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: payload) else {
+            debugPrint("WebhookService: Failed to serialize tracking payload")
+            return
+        }
+        
+        request.httpBody = jsonData
+        
+        // Send asynchronously - fire and forget, don't block UI
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                debugPrint("WebhookService: Tracking webhook error: \(error.localizedDescription)")
+                return
+            }
+            
+            if let httpResponse = response as? HTTPURLResponse {
+                if httpResponse.statusCode == 200 {
+                    debugPrint("WebhookService: Dhikr tracking sent successfully")
+                } else {
+                    debugPrint("WebhookService: Tracking webhook returned status \(httpResponse.statusCode)")
+                }
+            }
+        }.resume()
     }
 }
 

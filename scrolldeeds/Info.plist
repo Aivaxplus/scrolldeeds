@@ -2,14 +2,67 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.scrolldeeds.app.shieldCheck</string>
+	</array>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>ar</string>
+		<string>nl</string>
+		<string>fr</string>
+		<string>de</string>
+		<string>ru</string>
+		<string>es</string>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>fb1320706686093734</string>
+			</array>
+		</dict>
+	</array>
+	<key>FacebookAppID</key>
+	<string>1320706686093734</string>
+	<key>FacebookAutoLogAppEventsEnabled</key>
+	<true/>
+	<key>FacebookClientToken</key>
+	<string>84ae34b392832d87a1b1283eb08505db</string>
+	<key>FacebookDisplayName</key>
+	<string>Nafsi</string>
+	<key>FacebookSKAdNetworkReportEnabled</key>
+	<true/>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>fbapi</string>
+		<string>fb-messenger-api</string>
+		<string>fbauth2</string>
+		<string>fbshareextension</string>
+	</array>
+	<key>NSAlarmKitUsageDescription</key>
+	<string>Nafsi schedules a real Fajr alarm so it can wake you even in silent mode. Photograph your object to turn it off.</string>
 	<key>NSFamilyControlsUsageDescription</key>
-	<string>ScrollDeeds uses Family Controls to help you manage screen time through Islamic mindfulness. Lock distracting apps and unlock them by reciting dhikr.</string>
+	<string>Nafsi uses Family Controls to help you manage screen time through Islamic mindfulness. Lock distracting apps and unlock them by reciting dhikr.</string>
 	<key>NSUserNotificationsUsageDescription</key>
-	<string>ScrollDeeds sends notifications to remind you when your screen time expires and to help you maintain mindful phone usage.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>ScrollDeeds uses speech recognition to verify your dhikr recitation. Your audio is processed on-device and sent to our secure verification service.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>ScrollDeeds needs microphone access to record your dhikr recitation for verification.</string>
+	<string>Nafsi sends notifications to remind you when your screen time expires and to help you maintain mindful phone usage.</string>
+	<key>NafsiOpenAIAPIKey</key>
+	<string></string>
+	<key>PostHogAPIKey</key>
+	<string>phc_qEYE2b7DNFVSmjyZk6lKwRx1uuSrUktpSo4tmUeK0Vq</string>
+	<key>SKAdNetworkItems</key>
+	<array>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>v9wttpbfk9.skadnetwork</string>
+		</dict>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>n38lu8286q.skadnetwork</string>
+		</dict>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -19,12 +72,7 @@
 	<array>
 		<string>processing</string>
 		<string>remote-notification</string>
+		<string>audio</string>
 	</array>
-	<key>BGTaskSchedulerPermittedIdentifiers</key>
-	<array>
-		<string>com.scrolldeeds.app.shieldCheck</string>
-	</array>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
 </dict>
 </plist>

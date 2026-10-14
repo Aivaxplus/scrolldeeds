@@ -1,0 +1,4 @@
+"notification.autolock.body" = "Your apps are locked. Complete a good deed in Nafsi to unlock them. 🌿";
+"notification.autolock.followup1.body" = "Your apps are still locked. Complete a good deed to continue. 🤲";
+"notification.autolock.followup2.body" = "Don't forget to complete your good deed in Nafsi to unlock your apps.";
+"notification.autolock.followup3.body" = "Nafsi is waiting. Complete a good deed and unlock your apps. 🌙";

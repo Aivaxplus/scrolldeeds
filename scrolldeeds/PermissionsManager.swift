@@ -35,13 +35,15 @@ final class PermissionsManager: ObservableObject {
     func requestFamilyControlsPermission() {
         #if canImport(FamilyControls)
         if #available(iOS 16.0, *) {
-            AuthorizationCenter.shared.requestAuthorization { [weak self] result in
-                DispatchQueue.main.async {
-                    switch result {
-                    case .success:
-                        self?.hasFamilyControlsAuthorization = (AuthorizationCenter.shared.authorizationStatus == .approved)
-                    case .failure:
-                        self?.hasFamilyControlsAuthorization = false
+            Task {
+                do {
+                    try await AuthorizationCenter.shared.requestAuthorization(for: .individual)
+                    await MainActor.run {
+                        self.hasFamilyControlsAuthorization = (AuthorizationCenter.shared.authorizationStatus == .approved)
+                    }
+                } catch {
+                    await MainActor.run {
+                        self.hasFamilyControlsAuthorization = false
                     }
                 }
             }

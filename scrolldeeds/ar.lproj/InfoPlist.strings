@@ -1,0 +1,4 @@
+/* Localized Info.plist strings — Arabic */
+"NSCameraUsageDescription" = "يستخدم Nafsi الكاميرا لإيقاف الفجر عبر تصوير الشيء الذي اخترته.";
+"NSAlarmKitUsageDescription" = "يجدول Nafsi منبّه فجر حقيقي ليوقظك حتى مع الوضع الصامت. صوّر شيئك لإيقافه.";
+"NSUserTrackingUsageDescription" = "يستخدم Nafsi هذا لقياس تثبيت التطبيق عبر الإعلانات وتحسين التسويق. يمكنك تغيير هذا في أي وقت من الإعدادات.";

@@ -17,6 +17,7 @@ import ManagedSettings
 
 struct SelectionView: View {
     @ObservedObject var shieldManager: ShieldManager
+    @ObservedObject private var languageManager = LanguageManager.shared
     @State private var isPickerPresented: Bool = false
     @State private var showPermissionAlert: Bool = false
     #if canImport(FamilyControls)
@@ -34,45 +35,56 @@ struct SelectionView: View {
                     HStack(spacing: 10) {
                         Image(systemName: "plus.circle.fill")
                             .font(.system(size: 18, weight: .semibold))
-                        Text("Choose Apps to Lock")
+                        Text(NSLocalizedString("selection.choose_apps", comment: "Choose Apps to Lock"))
                             .font(.system(size: 16, weight: .semibold))
                     }
                 }
                 .buttonStyle(SecondaryButtonStyle(isLarge: false))
                 .familyActivityPicker(isPresented: $isPickerPresented, selection: $selection)
-                .overlay {
-                    if showPermissionAlert {
-                        CustomAlertView(
-                            title: "Permission Required",
-                            message: "Family Controls permission was denied. Please enable it in Settings → Screen Time → ScrollDeeds",
-                            icon: "lock.shield.fill",
-                            iconColor: AppTheme.primary,
-                            isPresented: $showPermissionAlert,
-                            primaryAction: {
-                                showPermissionAlert = false
-                            },
-                            primaryActionTitle: "OK"
-                        )
-                    }
+                // Presented full-screen (not as a small `.overlay` on this button) so the
+                // alert always renders correctly above the whole dashboard instead of
+                // getting sandwiched between the surrounding cards.
+                .fullScreenCover(isPresented: $showPermissionAlert) {
+                    CustomAlertView(
+                        title: NSLocalizedString("selection.permission_title", comment: "Permission Required"),
+                        message: NSLocalizedString("selection.permission_message", comment: "Family Controls permission was denied. Please enable it in Settings → Screen Time → ScrollDeeds"),
+                        icon: "lock.shield.fill",
+                        iconColor: AppTheme.primary,
+                        isPresented: $showPermissionAlert,
+                        primaryAction: {
+                            showPermissionAlert = false
+                        },
+                        primaryActionTitle: NSLocalizedString("common.ok", comment: "OK"),
+                        dimBackground: false
+                    )
                 }
             } else {
-                Text("Requires iOS 16+")
+                Text(NSLocalizedString("selection.requires_ios16", comment: "Requires iOS 16+"))
                     .font(.system(size: 14))
                     .foregroundColor(AppTheme.textSecondary)
             }
             #else
-            Text("FamilyControls not available")
+            Text(NSLocalizedString("selection.not_available", comment: "FamilyControls not available"))
                 .font(.system(size: 14))
                 .foregroundColor(AppTheme.textSecondary)
             #endif
         }
+        .id(languageManager.currentLanguage)
         #if canImport(FamilyControls)
+        .onAppear {
+            #if canImport(FamilyControls)
+            if #available(iOS 16.0, *) {
+                selection = shieldManager.currentFamilySelection()
+            }
+            #endif
+        }
         .onChange(of: isPickerPresented) { _ in
             if !isPickerPresented {
-                shieldManager.updateSelection(apps: selection.applications)
-                // Apply shield immediately after selection
-                if !shieldManager.selectedApplications.isEmpty {
-                    shieldManager.applyShield()
+                if #available(iOS 16.0, *) {
+                    shieldManager.commitPickerSelection(selection)
+                    if shieldManager.hasShieldTargets {
+                        shieldManager.applyShield()
+                    }
                 }
             }
         }
@@ -97,11 +109,11 @@ struct SelectionView: View {
                 return
             }
             
-            // Request authorization using completion handler (more reliable)
-            AuthorizationCenter.shared.requestAuthorization { result in
-                DispatchQueue.main.async {
-                    switch result {
-                    case .success:
+            // Request authorization using async/await (modern API)
+            Task {
+                do {
+                    try await AuthorizationCenter.shared.requestAuthorization(for: .individual)
+                    await MainActor.run {
                         let newStatus = AuthorizationCenter.shared.authorizationStatus
                         debugPrint("✅ Authorization SUCCESS! Status: \(newStatus.rawValue)")
                         
@@ -112,8 +124,9 @@ struct SelectionView: View {
                             debugPrint("⚠️ Success but not approved. Status: \(newStatus.rawValue)")
                             showPermissionAlert = true
                         }
-                        
-                    case .failure(let error):
+                    }
+                } catch {
+                    await MainActor.run {
                         debugPrint("❌ Authorization FAILED: \(error.localizedDescription)")
                         showPermissionAlert = true
                     }

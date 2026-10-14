@@ -18,52 +18,52 @@ struct AlarmView: View {
     
     var body: some View {
         ZStack {
-            // Red alarm background with pulsing effect
-            Color.red
+            SDPageBackground()
+            AppTheme.error.opacity(pulseScale > 1.0 ? 0.10 : 0.06)
                 .ignoresSafeArea()
-                .opacity(pulseScale > 1.0 ? 0.9 : 1.0)
             
-            VStack(spacing: 30) {
+            SDOverlayCard(maxWidth: 360) {
+                VStack(spacing: 26) {
                 // Alarm icon with animation
-                Image(systemName: "bell.fill")
-                    .font(.system(size: 80))
-                    .foregroundColor(.white)
-                    .scaleEffect(pulseScale)
+                SDIconBadge(systemName: "bell.fill", size: 92, iconSize: 40, color: AppTheme.error)
+                        .scaleEffect(pulseScale)
                 
                 // Title
-                Text("⏰ TIME'S UP! 🔒")
-                    .font(.system(size: 36, weight: .bold))
-                    .foregroundColor(.white)
+                Text(NSLocalizedString("alarm.title", comment: "⏰ TIME'S UP! 🔒"))
+                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .foregroundColor(AppTheme.textPrimary)
                     .multilineTextAlignment(.center)
+                    .lineLimit(nil)
+                    .minimumScaleFactor(0.8)
                 
                 // Message
                 VStack {
-                    let level = UserDefaults.standard.string(forKey: "difficultyLevel").flatMap { DifficultyLevel(rawValue: $0) } ?? .medium
-                    Text("Your \(level.displayDuration) are over.\nYour apps are now locked.")
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundColor(.white.opacity(0.9))
+                    Text(NSLocalizedString("alarm.message", comment: "Your time is over.\nYour apps are now locked."))
+                            .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(AppTheme.textSecondary)
                         .multilineTextAlignment(.center)
+                        .lineLimit(nil)
+                        .minimumScaleFactor(0.9)
                 }
-                .padding(.horizontal, 40)
                 
                 // Dismiss button
                 Button(action: {
                     stopAlarm()
                     onDismiss()
                 }) {
-                    Text("OK, I Understand")
+                    Text(NSLocalizedString("alarm.understand", comment: "OK, I Understand"))
                         .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(.red)
+                        .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
-                        .background(Color.white)
-                        .cornerRadius(12)
                 }
-                .padding(.horizontal, 40)
+                .buttonStyle(ActionCardButtonStyle())
                 .padding(.top, 20)
+                }
             }
         }
         .onAppear {
+            PostHogManager.shared.screen(AnalyticsScreen.alarm)
             startAlarm()
         }
         .onDisappear {

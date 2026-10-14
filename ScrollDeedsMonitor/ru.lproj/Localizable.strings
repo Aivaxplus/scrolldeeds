@@ -1,0 +1,4 @@
+"notification.autolock.body" = "Твои приложения заблокированы. Соверши доброе дело в Nafsi, чтобы разблокировать их. 🌿";
+"notification.autolock.followup1.body" = "Твои приложения всё ещё заблокированы. Соверши доброе дело, чтобы продолжить. 🤲";
+"notification.autolock.followup2.body" = "Не забудь совершить доброе дело в Nafsi, чтобы разблокировать приложения.";
+"notification.autolock.followup3.body" = "Nafsi ждёт тебя. Соверши доброе дело и разблокируй приложения. 🌙";

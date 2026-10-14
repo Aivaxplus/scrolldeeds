@@ -9,40 +9,32 @@ import SwiftUI
 import Charts
 
 struct ProgressView: View {
-    @ObservedObject var userDataManager: UserDataManager
+    @ObservedObject private var userDataManager = UserDataManager.shared
     @ObservedObject var localStorage: LocalStorageManager
+    @ObservedObject private var languageManager = LanguageManager.shared
     @Environment(\.dismiss) private var dismiss
     
-    // Computed properties for dhikr counts
-    private var totalDhikr: Int {
-        userDataManager.totalSessions * 3
+    // 1 task = 1 good deed (no multiplier)
+    private var totalGoodDeeds: Int {
+        userDataManager.totalSessions
     }
     
-    private var todayDhikr: Int {
-        userDataManager.todaySessions * 3
+    private var todayGoodDeeds: Int {
+        userDataManager.todaySessions
     }
     
     var body: some View {
         ZStack {
-            AppTheme.background.ignoresSafeArea()
+            SDPageBackground()
             
             VStack(spacing: 0) {
-                // Top Header with Close Button
-                HStack {
-                    Spacer()
-                    Button(action: {
+                SDBrandHeader {
+                    SDDismissButton(action: {
                         HapticManager.shared.soft()
                         dismiss()
-                    }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 28))
-                            .foregroundColor(AppTheme.textMuted)
-                    }
+                    })
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 20)
-                .padding(.bottom, 8)
-                
+
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 20) {
                         // Header - same style as PracticeSessionView
@@ -73,6 +65,9 @@ struct ProgressView: View {
                 }
             }
         }
+        .id(languageManager.currentLanguage)
+        .toolbar(.hidden, for: .navigationBar)
+        .trackScreen(AnalyticsScreen.stats)
     }
     
     // MARK: - Header Section
@@ -80,17 +75,17 @@ struct ProgressView: View {
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: 4) {
             if userDataManager.totalSessions == 0 {
-                Text("Start Your Journey")
-                    .font(.system(size: 24, weight: .bold))
+                Text(NSLocalizedString("progress.start_journey", comment: "Start Your Journey"))
+                    .font(AppTypography.screenTitle)
                     .foregroundColor(AppTheme.textPrimary)
-                Text("Complete your first dhikr session")
+                Text(NSLocalizedString("progress.first_session", comment: "Complete your first dhikr session"))
                     .font(.system(size: 16))
                     .foregroundColor(AppTheme.textSecondary)
             } else {
-                Text("Your Progress")
-                    .font(.system(size: 24, weight: .bold))
+                Text(NSLocalizedString("progress.your_progress", comment: "Your Progress"))
+                    .font(AppTypography.screenTitle)
                     .foregroundColor(AppTheme.textPrimary)
-                Text("See how your mindful practice is growing")
+                Text(NSLocalizedString("progress.growing_practice", comment: "See how your mindful practice is growing"))
                     .font(.system(size: 16))
                     .foregroundColor(AppTheme.textSecondary)
             }
@@ -111,10 +106,10 @@ struct ProgressView: View {
             }
             
             VStack(spacing: 8) {
-                Text("No Data Yet")
-                    .font(.system(size: 24, weight: .bold))
+                Text(NSLocalizedString("progress.no_data", comment: "No Data Yet"))
+                    .font(AppTypography.screenTitle)
                     .foregroundColor(AppTheme.textPrimary)
-                Text("Complete your first dhikr session to start tracking your progress")
+                Text(NSLocalizedString("progress.no_data_message", comment: "Complete your first dhikr session to start tracking your progress"))
                     .font(.system(size: 15))
                     .foregroundColor(AppTheme.textSecondary)
                     .multilineTextAlignment(.center)
@@ -133,28 +128,28 @@ struct ProgressView: View {
     private var todayStatsSection: some View {
         VStack(spacing: 16) {
             HStack {
-                Text("Today")
+                Text(NSLocalizedString("progress.today", comment: "Today"))
                     .font(.system(size: 20, weight: .bold))
                     .foregroundColor(AppTheme.textPrimary)
                 Spacer()
             }
             
             HStack(spacing: 12) {
-                // Today's Dhikr Count
+                // Today's good deeds
                 todayStatCard(
                     icon: "hands.sparkles.fill",
-                    value: "\(todayDhikr)",
-                    label: "Dhikr Today",
-                    subtitle: "\(userDataManager.todaySessions) sessions",
+                    value: "\(todayGoodDeeds)",
+                    label: NSLocalizedString("progress.good_deeds_today", comment: "Good Deeds Today"),
+                    subtitle: String(format: NSLocalizedString("progress.deeds_count", comment: "%d good deed(s)"), userDataManager.todaySessions),
                     color: AppTheme.primary
                 )
                 
                 // Today's Time
                 todayStatCard(
                     icon: "clock.fill",
-                    value: "\(userDataManager.todayMinutes)",
-                    label: "Minutes Unlocked",
-                    subtitle: "Today",
+                    value: formatDuration(seconds: userDataManager.todayMinutes * 60),
+                    label: NSLocalizedString("progress.minutes_unlocked", comment: "Minutes Unlocked"),
+                    subtitle: NSLocalizedString("progress.today", comment: "Today"),
                     color: AppTheme.accent
                 )
             }
@@ -174,12 +169,17 @@ struct ProgressView: View {
                 Text(value)
                     .font(.system(size: 36, weight: .bold, design: .rounded))
                     .foregroundColor(AppTheme.textPrimary)
+                    .lineLimit(nil)
+                    .minimumScaleFactor(0.7)
                 Text(label)
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(AppTheme.textPrimary)
+                    .lineLimit(nil)
+                    .minimumScaleFactor(0.8)
                 Text(subtitle)
                     .font(.system(size: 13))
                     .foregroundColor(AppTheme.textSecondary)
+                    .lineLimit(nil)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -197,7 +197,7 @@ struct ProgressView: View {
                 Image(systemName: "chart.line.uptrend.xyaxis")
                     .font(.system(size: 18))
                     .foregroundColor(AppTheme.primary)
-                Text("Daily Dhikr Progress")
+                Text(NSLocalizedString("progress.daily_good_deeds", comment: "Daily Good Deeds"))
                     .font(.system(size: 18, weight: .bold))
                     .foregroundColor(AppTheme.textPrimary)
                 Spacer()
@@ -206,7 +206,6 @@ struct ProgressView: View {
             if #available(iOS 16.0, *) {
                 let chartData = getLast7DaysData()
                 let maxValue = max(1, chartData.map { $0.dhikrCount }.max() ?? 1)
-                let yAxisStep = max(1, (maxValue + 2) / 4) // Dynamic step based on max value
                 
                 Chart(chartData, id: \.id) { item in
                     LineMark(
@@ -251,8 +250,7 @@ struct ProgressView: View {
                 .chartXAxis {
                     AxisMarks(values: .stride(by: .day)) { value in
                         if let date = value.as(Date.self) {
-                            let calendar = Calendar.current
-                            let weekday = calendar.component(.weekday, from: date)
+                            let weekday = Calendar.current.component(.weekday, from: date)
                             let dayLabels = ["S", "M", "T", "W", "T", "F", "S"]
                             let dayLabel = dayLabels[weekday - 1]
                             AxisValueLabel {
@@ -272,7 +270,7 @@ struct ProgressView: View {
                 Image(systemName: "info.circle.fill")
                     .font(.system(size: 11))
                     .foregroundColor(AppTheme.primary.opacity(0.6))
-                Text("Shows your daily dhikr count over the last 7 days")
+                Text(NSLocalizedString("progress.chart_info", comment: "Shows your daily dhikr count over the last 7 days"))
                     .font(.system(size: 12))
                     .foregroundColor(AppTheme.textMuted)
             }
@@ -354,7 +352,7 @@ struct ProgressView: View {
     private var overallStatsGrid: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Overall Stats")
+                Text(NSLocalizedString("progress.overall_stats", comment: "Overall Stats"))
                     .font(.system(size: 20, weight: .bold))
                     .foregroundColor(AppTheme.textPrimary)
                 Spacer()
@@ -364,14 +362,14 @@ struct ProgressView: View {
                 HStack(spacing: 12) {
                     statCard(
                         icon: "hands.sparkles.fill",
-                        value: "\(totalDhikr)",
-                        label: "Total Dhikr",
+                        value: "\(totalGoodDeeds)",
+                        label: NSLocalizedString("progress.total_good_deeds", comment: "Total Good Deeds"),
                         color: AppTheme.primary
                     )
                     statCard(
                         icon: "checkmark.circle.fill",
                         value: "\(userDataManager.totalSessions)",
-                        label: "Total Sessions",
+                        label: NSLocalizedString("progress.total_sessions", comment: "Total Sessions"),
                         color: AppTheme.success
                     )
                 }
@@ -379,14 +377,14 @@ struct ProgressView: View {
                 HStack(spacing: 12) {
                     statCard(
                         icon: "clock.fill",
-                        value: "\(userDataManager.totalMinutes / 60)h",
-                        label: "Total Time",
+                        value: formatDuration(seconds: userDataManager.totalMinutes * 60),
+                        label: NSLocalizedString("progress.total_time", comment: "Total Time"),
                         color: AppTheme.accent
                     )
                     statCard(
                         icon: "chart.line.uptrend.xyaxis.circle.fill",
                         value: "\(getAverageSessions())",
-                        label: "Avg/Day",
+                        label: NSLocalizedString("progress.avg_per_day", comment: "Avg/Day"),
                         color: AppTheme.primary
                     )
                 }
@@ -407,9 +405,13 @@ struct ProgressView: View {
                 Text(value)
                     .font(.system(size: 28, weight: .bold, design: .rounded))
                     .foregroundColor(AppTheme.textPrimary)
+                    .lineLimit(nil)
+                    .minimumScaleFactor(0.7)
                 Text(label)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(AppTheme.textSecondary)
+                    .lineLimit(nil)
+                    .minimumScaleFactor(0.8)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -433,10 +435,10 @@ struct ProgressView: View {
             }
             
             VStack(alignment: .leading, spacing: 4) {
-                Text("\(userDataManager.currentStreak) Day Streak!")
+                Text(String(format: NSLocalizedString("progress.streak", comment: "%d Day Streak!"), userDataManager.currentStreak))
                     .font(.system(size: 20, weight: .bold))
                     .foregroundColor(AppTheme.textPrimary)
-                Text("Keep it going! Don't break the chain.")
+                Text(NSLocalizedString("progress.streak_message", comment: "Keep it going! Don't break the chain."))
                     .font(.system(size: 14))
                     .foregroundColor(AppTheme.textSecondary)
             }
@@ -459,25 +461,38 @@ struct ProgressView: View {
     }
     
     // MARK: - Helper Functions
-    
+
+    /// Formats duration in seconds as "Xh Xm" / "Xu Xm" etc. when >= 60 min, else "Xm Ys" or "Xs". Uses same locale keys as dashboard.
+    private func formatDuration(seconds: Int) -> String {
+        let s = max(0, seconds)
+        if s >= 3600 {
+            return String(format: NSLocalizedString("dashboard.time_format_hours", comment: "%dh %dm"), s / 3600, (s % 3600) / 60)
+        } else if s >= 60 {
+            return String(format: NSLocalizedString("dashboard.time_format", comment: "%dm %ds"), s / 60, s % 60)
+        } else {
+            return String(format: NSLocalizedString("dashboard.time_format_seconds", comment: "%ds"), s)
+        }
+    }
+
     private func getAverageSessions() -> Int {
-        let days = max(1, userDataManager.currentStreak)
-        return userDataManager.totalSessions / days
+        let practiced = userDataManager.dailyHistory.filter { $0.sessions > 0 }
+        let days = max(1, practiced.count)
+        let sessions = practiced.reduce(0) { $0 + $1.sessions }
+        return sessions / days
     }
     
     private func getLast7DaysData() -> [DayData] {
-        let calendar = Calendar.current
         let last7Days = userDataManager.getLast7Days()
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: languageManager.currentLanguage)
+        formatter.setLocalizedDateFormatFromTemplate("EEE")
         
         // Map to day labels correctly - use short day names
         return last7Days.map { stats in
-            let weekday = calendar.component(.weekday, from: stats.date)
-            // Sunday = 1, Monday = 2, ..., Saturday = 7
-            let dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-            let dayLabel = dayLabels[weekday - 1]
-            // Each session = 3 dhikr
-            let dhikrCount = stats.sessions * 3
-            return DayData(day: dayLabel, date: stats.date, dhikrCount: dhikrCount)
+            let dayLabel = formatter.string(from: stats.date)
+            // 1 session = 1 good deed
+            let goodDeedCount = stats.sessions
+            return DayData(day: dayLabel, date: stats.date, dhikrCount: goodDeedCount)
         }
     }
 }
@@ -491,6 +506,6 @@ struct DayData: Identifiable {
 
 #Preview {
     NavigationView {
-        ProgressView(userDataManager: UserDataManager(), localStorage: LocalStorageManager.shared)
+        ProgressView(localStorage: LocalStorageManager.shared)
     }
 }

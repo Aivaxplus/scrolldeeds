@@ -9,43 +9,38 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var localStorage: LocalStorageManager
-    @ObservedObject var userDataManager: UserDataManager
-    @AppStorage("userAppearance") private var userAppearance: Int = 0 // 0 = Dark, 1 = Light, 2 = System
+    @ObservedObject private var userDataManager = UserDataManager.shared
+    @ObservedObject private var subscriptionManager = SubscriptionManager.shared
     @StateObject private var notificationManager = NotificationManager.shared
+    @ObservedObject private var appearanceManager = AppearanceManager.shared
     @Environment(\.dismiss) var dismiss
     @State private var showQuickGuide: Bool = false
-    @State private var showReminderSettings: Bool = false
+    @State private var showDifficultySettings: Bool = false
+    @State private var showStatistics: Bool = false
     @State private var showShareSheet: Bool = false
-    @State private var showDifficultyInfo: DifficultyLevel? = nil
     @State private var showCustomerCenter: Bool = false
-    
+    @State private var showLanguageSettings: Bool = false
+    @State private var showInAppFeedback: Bool = false
+    @ObservedObject private var languageManager = LanguageManager.shared
+
     var body: some View {
         ZStack {
-            AppTheme.background.ignoresSafeArea()
+            SDPageBackground()
             
             VStack(spacing: 0) {
-                // Top Header with Close Button
-                HStack {
-                    Spacer()
-                    Button(action: {
+                SDBrandHeader {
+                    SDDismissButton(action: {
                         HapticManager.shared.soft()
                         dismiss()
-                    }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 28))
-                            .foregroundColor(AppTheme.textMuted)
-                    }
+                    })
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 20)
-                .padding(.bottom, 8)
-                
+
                 ScrollView {
                 VStack(spacing: 24) {
                     // Notifications Section
                     VStack(alignment: .leading, spacing: 16) {
-                        Text("Notifications")
-                            .font(.system(size: 18, weight: .bold))
+                        Text(NSLocalizedString("settings.notifications", comment: "Notifications"))
+                            .font(AppTypography.sectionTitle)
                             .foregroundColor(AppTheme.textPrimary)
                         
                         VStack(spacing: 0) {
@@ -54,21 +49,33 @@ struct SettingsView: View {
                                     .font(.system(size: 20))
                                     .foregroundColor(AppTheme.primary)
                                     .frame(width: 32)
-                                
-                                Text("Push Notifications")
-                                    .font(.system(size: 16))
-                                    .foregroundColor(AppTheme.textPrimary)
-                                
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(NSLocalizedString("settings.push_notifications", comment: "Push Notifications"))
+                                        .font(.system(size: 16))
+                                        .foregroundColor(AppTheme.textPrimary)
+
+                                    if !notificationManager.notificationsEnabled {
+                                        Text(NSLocalizedString("settings.notifications_off_hint", comment: "Notifications off hint"))
+                                            .font(.system(size: 13))
+                                            .foregroundColor(AppTheme.textMuted)
+                                    } else if !notificationManager.isAuthorized {
+                                        Text(NSLocalizedString("settings.notifications_permission_hint", comment: "Notifications permission hint"))
+                                            .font(.system(size: 13))
+                                            .foregroundColor(AppTheme.textMuted)
+                                    }
+                                }
+
                                 Spacer()
-                                
-                                Image(systemName: notificationManager.isAuthorized ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                    .font(.system(size: 20))
-                                    .foregroundColor(notificationManager.isAuthorized ? .green : .red)
+
+                                Toggle("", isOn: notificationsToggleBinding)
+                                    .labelsHidden()
+                                    .tint(AppTheme.primary)
                             }
                             .padding(.horizontal, 16)
                             .padding(.vertical, 14)
-                            
-                            if !notificationManager.isAuthorized {
+
+                            if !notificationManager.isAuthorized && notificationManager.notificationsEnabled {
                                 Divider()
                                     .padding(.leading, 64)
                                 
@@ -83,7 +90,7 @@ struct SettingsView: View {
                                             .foregroundColor(AppTheme.primary)
                                             .frame(width: 32)
                                         
-                                        Text("Enable in Settings")
+                                        Text(NSLocalizedString("settings.enable_in_settings", comment: "Enable in Settings"))
                                             .font(.system(size: 16))
                                             .foregroundColor(AppTheme.primary)
                                         
@@ -97,159 +104,186 @@ struct SettingsView: View {
                                     .padding(.vertical, 14)
                                 }
                             }
-                            
-                            Divider()
-                                .padding(.leading, 64)
-                            
-                            Button(action: {
-                                showReminderSettings = true
-                            }) {
-                                HStack(spacing: 16) {
-                                    Image(systemName: "clock.fill")
-                                        .font(.system(size: 20))
-                                        .foregroundColor(AppTheme.primary)
-                                        .frame(width: 32)
-                                    
-                                    Text("Daily Reminders")
-                                        .font(.system(size: 16))
-                                        .foregroundColor(AppTheme.textPrimary)
-                                    
-                                    Spacer()
-                                    
-                                    Image(systemName: "chevron.right")
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundColor(AppTheme.textMuted)
-                                }
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 14)
-                            }
                         }
                         .background(AppTheme.card)
                         .cornerRadius(16)
                     }
-                    
+
+                    // Statistics Section
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text(NSLocalizedString("tab.stats", comment: "Stats"))
+                            .font(AppTypography.sectionTitle)
+                            .foregroundColor(AppTheme.textPrimary)
+
+                        Button(action: {
+                            HapticManager.shared.soft()
+                            showStatistics = true
+                        }) {
+                            HStack(spacing: 16) {
+                                Image(systemName: "chart.line.uptrend.xyaxis")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(AppTheme.primary)
+                                    .frame(width: 32)
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(NSLocalizedString("settings.statistics", comment: "Statistics"))
+                                        .font(.system(size: 16))
+                                        .foregroundColor(AppTheme.textPrimary)
+
+                                    Text(NSLocalizedString("settings.statistics.subtitle", comment: "Your full history"))
+                                        .font(.system(size: 13))
+                                        .foregroundColor(AppTheme.textSecondary)
+                                        .multilineTextAlignment(.leading)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+
+                                Spacer()
+
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(AppTheme.textMuted)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 14)
+                        }
+                        .background(AppTheme.card)
+                        .cornerRadius(16)
+                    }
+
+                    // Practice Section
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text(NSLocalizedString("settings.practice", comment: "Practice"))
+                            .font(AppTypography.sectionTitle)
+                            .foregroundColor(AppTheme.textPrimary)
+
+                        Button(action: {
+                            showDifficultySettings = true
+                        }) {
+                            HStack(spacing: 16) {
+                                Image(systemName: "slider.horizontal.3")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(AppTheme.primary)
+                                    .frame(width: 32)
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(NSLocalizedString("settings.difficulty_level", comment: "Difficulty Level"))
+                                        .font(.system(size: 16))
+                                        .foregroundColor(AppTheme.textPrimary)
+
+                                    Text(currentDifficultySummary())
+                                        .font(.system(size: 13))
+                                        .foregroundColor(AppTheme.textSecondary)
+                                }
+
+                                Spacer()
+
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(AppTheme.textMuted)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 14)
+                        }
+                        .background(AppTheme.card)
+                        .cornerRadius(16)
+                    }
+
                     // Appearance Section
                     VStack(alignment: .leading, spacing: 16) {
-                        Text("Appearance")
-                            .font(.system(size: 18, weight: .bold))
+                        Text(NSLocalizedString("settings.appearance", comment: "Appearance"))
+                            .font(AppTypography.sectionTitle)
                             .foregroundColor(AppTheme.textPrimary)
-                        
+
                         VStack(spacing: 0) {
-                            ForEach(0..<3) { index in
+                            ForEach(Array(AppearanceMode.allCases.enumerated()), id: \.element) { index, mode in
+                                if index > 0 {
+                                    Divider().padding(.leading, 64)
+                                }
                                 Button(action: {
-                                    HapticManager.shared.appearanceChanged()
-                                    withAnimation {
-                                        userAppearance = index
+                                    HapticManager.shared.selection()
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        appearanceManager.mode = mode
                                     }
                                 }) {
                                     HStack(spacing: 16) {
-                                        Image(systemName: appearanceIcon(for: index))
+                                        Image(systemName: mode.icon)
                                             .font(.system(size: 20))
-                                            .foregroundColor(AppTheme.primary)
+                                            .foregroundColor(appearanceManager.mode == mode ? AppTheme.primary : AppTheme.textMuted)
                                             .frame(width: 32)
-                                        
-                                        Text(appearanceTitle(for: index))
+
+                                        Text(mode.label)
                                             .font(.system(size: 16))
                                             .foregroundColor(AppTheme.textPrimary)
-                                        
+
                                         Spacer()
-                                        
-                                        if userAppearance == index {
+
+                                        if appearanceManager.mode == mode {
                                             Image(systemName: "checkmark.circle.fill")
                                                 .font(.system(size: 20))
                                                 .foregroundColor(AppTheme.primary)
+                                        } else {
+                                            Circle()
+                                                .stroke(AppTheme.textMuted.opacity(0.3), lineWidth: 1.5)
+                                                .frame(width: 20, height: 20)
                                         }
                                     }
                                     .padding(.horizontal, 16)
                                     .padding(.vertical, 14)
                                 }
-                                
-                                if index < 2 {
-                                    Divider()
-                                        .padding(.leading, 64)
-                                }
+                                .buttonStyle(PlainButtonStyle())
                             }
                         }
                         .background(AppTheme.card)
                         .cornerRadius(16)
                     }
-                    
-                    // Difficulty Level Section
+
+                    // Language Section
                     VStack(alignment: .leading, spacing: 16) {
-                        Text("Difficulty Level")
-                            .font(.system(size: 18, weight: .bold))
+                        Text(NSLocalizedString("settings.language", comment: "Language"))
+                            .font(AppTypography.sectionTitle)
                             .foregroundColor(AppTheme.textPrimary)
                         
-                        // 2x2 Grid
-                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                            ForEach(DifficultyLevel.allCases, id: \.self) { level in
-                                let isSelected = userDataManager.difficultyLevel == level
-                                Button(action: {
-                                    HapticManager.shared.selection()
-                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
-                                        userDataManager.setDifficultyLevel(level)
-                                    }
-                                    showDifficultyInfo = level
-                                }) {
-                                    VStack(spacing: 10) {
-                                        // Icon
-                                        ZStack {
-                                            Circle()
-                                                .fill(level.color.opacity(isSelected ? 0.2 : 0.1))
-                                                .frame(width: 48, height: 48)
-                                            Image(systemName: level.icon)
-                                                .font(.system(size: 22, weight: .semibold))
-                                                .foregroundColor(level.color)
-                                        }
-                                        
-                                        // Name
-                                        Text(level.displayName)
-                                            .font(.system(size: 15, weight: .bold))
-                                            .foregroundColor(isSelected ? AppTheme.textPrimary : AppTheme.textSecondary)
-                                        
-                                        // Duration
-                                        Text(level.displayDuration)
-                                            .font(.system(size: 12, weight: .semibold))
-                                            .foregroundColor(level.color)
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 4)
-                                            .background(level.color.opacity(0.1))
-                                            .cornerRadius(6)
-                                        
-                                        // Selection indicator
-                                        if isSelected {
-                                            Image(systemName: "checkmark.circle.fill")
-                                                .font(.system(size: 16))
-                                                .foregroundColor(level.color)
-                                        } else {
-                                            Circle()
-                                                .stroke(AppTheme.textMuted.opacity(0.3), lineWidth: 1.5)
-                                                .frame(width: 16, height: 16)
-                                        }
-                                    }
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 16)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 16)
-                                            .fill(AppTheme.card)
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 16)
-                                                    .stroke(isSelected ? level.color : AppTheme.muted.opacity(0.3), lineWidth: isSelected ? 2 : 1)
-                                            )
-                                    )
-                                    .shadow(color: isSelected ? level.color.opacity(0.15) : Color.clear, radius: 8, y: 4)
-                                    .scaleEffect(isSelected ? 1.02 : 1.0)
+                        Button(action: {
+                            showLanguageSettings = true
+                        }) {
+                            HStack(spacing: 16) {
+                                Image(systemName: "globe")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(AppTheme.primary)
+                                    .frame(width: 32)
+                                
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(NSLocalizedString("settings.app_language", comment: "App Language"))
+                                        .font(.system(size: 16))
+                                        .foregroundColor(AppTheme.textPrimary)
+                                    
+                                    Text(currentLanguageName())
+                                        .font(.system(size: 13))
+                                        .foregroundColor(AppTheme.textSecondary)
                                 }
-                                .buttonStyle(PlainButtonStyle())
-                                .animation(.spring(response: 0.35, dampingFraction: 0.7), value: isSelected)
+                                
+                                Spacer()
+                                
+                                Text(currentLanguageFlag())
+                                    .font(.system(size: 24))
+                                
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(AppTheme.textMuted)
                             }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 14)
                         }
+                        .background(AppTheme.card)
+                        .cornerRadius(16)
                     }
                     
+                    InAppFeedbackCard(source: .settings, isPresented: $showInAppFeedback)
+
                     // Help Section
                     VStack(alignment: .leading, spacing: 16) {
-                        Text("Help")
-                            .font(.system(size: 18, weight: .bold))
+                        Text(NSLocalizedString("settings.help", comment: "Help"))
+                            .font(AppTypography.sectionTitle)
                             .foregroundColor(AppTheme.textPrimary)
                         
                         Button(action: { showQuickGuide = true }) {
@@ -259,7 +293,7 @@ struct SettingsView: View {
                                     .foregroundColor(AppTheme.primary)
                                     .frame(width: 32)
                                 
-                                Text("How to Use ScrollDeeds")
+                                Text(NSLocalizedString("settings.how_to_use", comment: "How to Use ScrollDeeds"))
                                     .font(.system(size: 16))
                                     .foregroundColor(AppTheme.textPrimary)
                                 
@@ -278,8 +312,8 @@ struct SettingsView: View {
                     
                     // Subscription Section
                     VStack(alignment: .leading, spacing: 16) {
-                        Text("Subscription")
-                            .font(.system(size: 18, weight: .bold))
+                        Text(NSLocalizedString("settings.subscription", comment: "Subscription"))
+                            .font(AppTypography.sectionTitle)
                             .foregroundColor(AppTheme.textPrimary)
                         
                         Button(action: {
@@ -291,7 +325,7 @@ struct SettingsView: View {
                                     .foregroundColor(AppTheme.primary)
                                     .frame(width: 32)
                                 
-                                Text("Manage Subscription")
+                                Text(NSLocalizedString("settings.manage_subscription", comment: "Manage Subscription"))
                                     .font(.system(size: 16))
                                     .foregroundColor(AppTheme.textPrimary)
                                 
@@ -310,8 +344,8 @@ struct SettingsView: View {
                     
                     // Share Section
                     VStack(alignment: .leading, spacing: 16) {
-                        Text("Share")
-                            .font(.system(size: 18, weight: .bold))
+                        Text(NSLocalizedString("settings.share", comment: "Share"))
+                            .font(AppTypography.sectionTitle)
                             .foregroundColor(AppTheme.textPrimary)
                         
                         Button(action: {
@@ -323,7 +357,7 @@ struct SettingsView: View {
                                     .foregroundColor(AppTheme.primary)
                                     .frame(width: 32)
                                 
-                                Text("Share ScrollDeeds")
+                                Text(NSLocalizedString("settings.share_app", comment: "Share ScrollDeeds"))
                                     .font(.system(size: 16))
                                     .foregroundColor(AppTheme.textPrimary)
                                 
@@ -342,21 +376,21 @@ struct SettingsView: View {
                     
                     // About Section
                     VStack(alignment: .leading, spacing: 16) {
-                        Text("About")
-                            .font(.system(size: 18, weight: .bold))
+                        Text(NSLocalizedString("settings.about", comment: "About"))
+                            .font(AppTypography.sectionTitle)
                             .foregroundColor(AppTheme.textPrimary)
                         
                         VStack(spacing: 0) {
                             settingRow(
                                 icon: "info.circle.fill",
-                                title: "Version",
-                                value: "1.0.1",
+                                title: NSLocalizedString("settings.version", comment: "Version"),
+                                value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—",
                                 showDivider: true
                             )
                             
                             settingRow(
                                 icon: "heart.fill",
-                                title: "Made for Muslims",
+                                title: NSLocalizedString("settings.made_for_muslims", comment: "Made for Muslims"),
                                 value: "🌙",
                                 showDivider: false
                             )
@@ -364,61 +398,78 @@ struct SettingsView: View {
                         .background(AppTheme.card)
                         .cornerRadius(16)
                     }
-                    
-                    // Actions Section
-                    VStack(spacing: 12) {
-                        #if DEBUG
-                        Button(action: {
-                            HapticManager.shared.soft()
-                            // Reset all local data
-                            localStorage.resetOnboarding()
-                            UserDataManager().resetAllData()
-                        }) {
-                            HStack(spacing: 12) {
-                                Image(systemName: "arrow.counterclockwise")
-                                    .font(.system(size: 18))
-                                Text("Reset App (Debug)")
-                                    .font(.system(size: 16, weight: .semibold))
-                            }
-                            .foregroundColor(AppTheme.error.opacity(0.8))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .background(AppTheme.card)
-                            .cornerRadius(16)
-                        }
-                        #endif
-                    }
                 }
                 .padding(20)
                 }
             }
         }
-        .preferredColorScheme(colorScheme(for: userAppearance))
+        .toolbar(.hidden, for: .navigationBar)
+        .preferredColorScheme(appearanceManager.preferredColorScheme)
         .fullScreenCover(isPresented: $showQuickGuide) {
             QuickGuideView(onComplete: {
                 showQuickGuide = false
             })
         }
-        .sheet(isPresented: $showReminderSettings) {
-            ReminderSettingsView()
+        .sheet(isPresented: $showStatistics) {
+            NavigationView {
+                ProgressView(localStorage: localStorage)
+            }
+        }
+        .sheet(isPresented: $showDifficultySettings) {
+            DifficultySettingsView()
         }
         .sheet(isPresented: $showShareSheet) {
             ShareSheet(activityItems: [
-                "Check out ScrollDeeds - a mindful way to break scrolling habits with dhikr! 🌙",
+                NSLocalizedString("settings.share_text", comment: "Check out Nafsi - a mindful way to break scrolling habits with good deeds! 🌙"),
                 URL(string: "https://apps.apple.com/app/id6754699333")!
             ])
-        }
-        .sheet(item: $showDifficultyInfo) { level in
-            DifficultyLevelInfoView(level: level) {
-                showDifficultyInfo = nil
-            }
-            .presentationDetents([.large])
-            .presentationDragIndicator(.visible)
-            .presentationCornerRadius(28)
         }
         .sheet(isPresented: $showCustomerCenter) {
             CustomerCenterView()
         }
+        .sheet(isPresented: $showLanguageSettings) {
+            LanguageSettingsView()
+        }
+        .sheet(isPresented: $showInAppFeedback) {
+            InAppFeedbackSheet(source: .settings, isPresented: $showInAppFeedback)
+        }
+        .onAppear {
+            PostHogManager.shared.screen(AnalyticsScreen.settings)
+            notificationManager.checkAuthorizationStatus()
+            NafsiWidgetSettings.shared.publish()
+        }
+    }
+
+    private var notificationsToggleBinding: Binding<Bool> {
+        Binding(
+            get: { notificationManager.notificationsEnabled },
+            set: { enabled in
+                HapticManager.shared.selection()
+                if enabled {
+                    if notificationManager.isAuthorized {
+                        notificationManager.setNotificationsEnabled(true)
+                    } else {
+                        notificationManager.requestPermission { granted in
+                            notificationManager.setNotificationsEnabled(granted)
+                        }
+                    }
+                } else {
+                    notificationManager.setNotificationsEnabled(false)
+                }
+            }
+        )
+    }
+
+    private func currentDifficultySummary() -> String {
+        let level = userDataManager.onboardingDifficultyLevel
+        let title: String
+        switch level {
+        case 0: title = NSLocalizedString("questionnaire.difficulty.option.easy.title", comment: "")
+        case 2: title = NSLocalizedString("questionnaire.difficulty.option.hard.title", comment: "")
+        default: title = NSLocalizedString("questionnaire.difficulty.option.medium.title", comment: "")
+        }
+        let minutes = UserDataManager.onboardingUnlockMinutes(forDifficultyLevel: level)
+        return String(format: NSLocalizedString("settings.difficulty.summary", comment: "Difficulty summary"), title, minutes)
     }
     
     private func settingRow(icon: String, title: String, value: String, showDivider: Bool) -> some View {
@@ -449,33 +500,15 @@ struct SettingsView: View {
         }
     }
     
-    private func appearanceIcon(for index: Int) -> String {
-        switch index {
-        case 0: return "moon.fill"
-        case 1: return "sun.max.fill"
-        case 2: return "circle.lefthalf.filled"
-        default: return "moon.fill"
-        }
+    private func currentLanguageName() -> String {
+        let language = LanguageManager.supportedLanguages.first { $0.code == languageManager.currentLanguage }
+        return language?.nativeName ?? "English"
     }
     
-    private func appearanceTitle(for index: Int) -> String {
-        switch index {
-        case 0: return "Dark Mode"
-        case 1: return "Light Mode"
-        case 2: return "System Default"
-        default: return "Dark Mode"
-        }
+    private func currentLanguageFlag() -> String {
+        let language = LanguageManager.supportedLanguages.first { $0.code == languageManager.currentLanguage }
+        return language?.flag ?? "🇬🇧"
     }
-    
-    private func colorScheme(for index: Int) -> ColorScheme? {
-        switch index {
-        case 0: return .dark
-        case 1: return .light
-        case 2: return nil // System default
-        default: return .dark
-        }
-    }
-    
 }
 
 // MARK: - Share Sheet
@@ -506,7 +539,7 @@ struct ShareSheet: UIViewControllerRepresentable {
 
 #Preview {
     NavigationView {
-        SettingsView(localStorage: LocalStorageManager.shared, userDataManager: UserDataManager())
+        SettingsView(localStorage: LocalStorageManager.shared)
     }
 }
 

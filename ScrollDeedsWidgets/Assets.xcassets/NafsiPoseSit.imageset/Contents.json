@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "NafsiPoseSit.png",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

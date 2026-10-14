@@ -42,17 +42,31 @@ final class ShieldManager: ObservableObject {
     private let store = ManagedSettingsStore(named: ManagedSettingsStore.Name("scrolldeeds.shield"))
     #endif
 
-    // Store selected app tokens and apps for UI
+    // Store selected app tokens and apps for UI (categories use tokens from FamilyActivitySelection)
     @Published var selectedApplications: Set<ApplicationToken> = []
+    @Published var selectedCategoryTokens: Set<ActivityCategoryToken> = []
     @Published var selectedApps: Set<Application> = []
     @Published var isShieldActive: Bool = false
+    
+    /// True when something is selected to lock (individual apps and/or whole categories).
+    var hasShieldTargets: Bool {
+        !selectedApplications.isEmpty || !selectedCategoryTokens.isEmpty
+    }
+    
+    /// For UI counts when showing “X selected” (apps + category picks).
+    var pickerSelectionCount: Int {
+        selectedApplications.count + selectedCategoryTokens.count
+    }
     
     
     // Use App Groups for data sharing (if needed in future)
     private let defaults = UserDefaults(suiteName: "group.com.scrolldeeds.app") ?? UserDefaults.standard
     private let shieldActiveKey = "isShieldActive"
+    private let shieldAppliedBuildKey = "shieldAppliedBuild.v5"
     private let selectionKey = "familyActivitySelection"
     private let unlockEndKey = "unlockEndTime"
+    private let unlockGracePeriodUntilKey = "unlockGracePeriodUntil"
+    private let lastUnlockCompletedAtKey = "lastUnlockCompletedAt"
     
     // Timer to check shield status every 1 second
     private var checkTimer: Timer?
@@ -68,31 +82,31 @@ final class ShieldManager: ObservableObject {
     
     private init() {
         loadLockedApps()
+        migrateLegacyUnlockEndTimeIfNeeded()
         debugPrint("🔒 ShieldManager init: Loaded \(selectedApplications.count) apps, shield active: \(isShieldActive)")
-        
-        // CRITICAL: Check if unlock period expired while app was closed
-        checkAndApplyShieldIfNeeded()
-        
-        // CRITICAL: Ensure shield state is correct immediately
-        ensureShieldState()
-        
-        // Start continuous checking timer
-        startContinuousChecking()
-        
-        // Listen for app lifecycle events
+
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(appDidBecomeActive),
             name: UIApplication.didBecomeActiveNotification,
             object: nil
         )
-        
+
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(appWillResignActive),
             name: UIApplication.willResignActiveNotification,
             object: nil
         )
+
+        // reconcile → NotificationManager / DeviceActivityManager → ShieldManager.shared.
+        // That re-enters `static let shared` while it is still nil and crashes
+        // (EXC_BREAKPOINT / dispatch_once) on the first launch after onboarding.
+        DispatchQueue.main.async { [self] in
+            self.checkAndApplyShieldIfNeeded()
+            self.ensureShieldState()
+            self.startContinuousChecking()
+        }
     }
     
     @objc private func appDidBecomeActive() {
@@ -101,86 +115,14 @@ final class ShieldManager: ObservableObject {
         backgroundTimer = nil
         endBackgroundShieldTask()
         
-        // CRITICAL: When user opens app, check if 15 minutes expired
-        // If yes, STOP THE ALARM and apply shield immediately
-        debugPrint("📱 App became active - Checking if 15 minutes expired")
-        
-        // Check if unlock time expired
-        if let unlockEnd = defaults.object(forKey: unlockEndKey) as? Date {
-            let now = Date()
-            if now >= unlockEnd {
-                // 15 minutes expired - STOP ALARM and APPLY SHIELD IMMEDIATELY
-                debugPrint("⏰⏰⏰ 15 minutes expired - User opened app, STOPPING ALARM and APPLYING shield NOW!")
-                
-                // Stop all recurring alarm notifications
-                NotificationManager.shared.cancelRecurringTimeExpiredNotifications()
-                NotificationManager.shared.cancelUnlockExpiryNotification()
-                debugPrint("🔕 ALARM STOPPED - User opened the app")
-                
-                // Apply shield immediately
-                forceApplyShieldOnExpiry()
-            } else {
-                // Time still valid - shield should be off
-                let remaining = Int(unlockEnd.timeIntervalSince(now))
-                debugPrint("⏰ Still unlocked: \(remaining/60)m \(remaining%60)s remaining")
-                checkAndApplyShieldIfNeeded()
-            }
-        } else {
-            // No unlock time - shield should be active
-            debugPrint("🔒 No unlock session - shield should be active")
-            checkAndApplyShieldIfNeeded()
-        }
-        
-        ensureShieldState()
-        
-        // CRITICAL: If shield is active, ensure reminder notifications are scheduled
-        // This fixes the issue where notifications stop after app restart or long periods
-        if isShieldActive {
-            UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
-                let hasReminderNotifications = requests.contains { $0.identifier.starts(with: "locked_app_reminder_") }
-                if !hasReminderNotifications {
-                    DispatchQueue.main.async {
-                        debugPrint("📅 Shield is active but no reminders found - re-scheduling now!")
-                        NotificationManager.shared.scheduleLockedAppReminders()
-                    }
-                }
-            }
-        }
-        
+        debugPrint("📱 App became active — reconciling shield state")
+        reconcileShieldState()
         debugPrint("📱 App active - shield check complete. Shield active: \(isShieldActive)")
     }
     
     @objc private func appWillResignActive() {
-        // SIMPLE APPROACH: Just log that app is going to background
-        // Shield will be applied when user opens app again (if 15 minutes expired)
         debugPrint("📱 ScrollDeeds going to background")
-        
-        // If timer already expired, apply shield now
-        if let unlockEnd = defaults.object(forKey: unlockEndKey) as? Date {
-            let now = Date()
-            if now >= unlockEnd {
-                // Time already expired - apply shield before going to background
-                debugPrint("⏰ Timer expired - applying shield before going to background")
-                forceApplyShieldOnExpiry()
-            } else {
-                // Timer still running - notification will remind user to open app
-                let remaining = Int(unlockEnd.timeIntervalSince(now))
-                debugPrint("⏰ Timer still running: \(remaining/60)m \(remaining%60)s - notification will remind user")
-            }
-        } else {
-            // No unlock time - shield should be active
-            debugPrint("🔒 No unlock time - ensuring shield is active")
-            #if canImport(ManagedSettings)
-            if #available(iOS 16.0, *), !selectedApplications.isEmpty {
-                store.shield.applications = selectedApplications
-                store.shield.applicationCategories = nil
-                store.shield.webDomains = nil
-                isShieldActive = true
-                saveLockedApps()
-                debugPrint("✅ Shield ACTIVE - Apps locked")
-            }
-            #endif
-        }
+        reconcileShieldState(notifyReminders: false)
     }
     
     // MARK: - Background Task for Automatic Shield Application
@@ -239,10 +181,8 @@ final class ShieldManager: ObservableObject {
                     debugPrint("⏰⏰⏰ BACKGROUND: Unlock time EXPIRED - APPLYING SHIELD NOW! ⏰⏰⏰")
                     
                     #if canImport(ManagedSettings)
-                    if #available(iOS 16.0, *), !self.selectedApplications.isEmpty {
-                        self.store.shield.applications = self.selectedApplications
-                        self.store.shield.applicationCategories = nil
-                        self.store.shield.webDomains = nil
+                    if #available(iOS 16.0, *), self.hasShieldTargets {
+                        self.applyPersistedSelectionToShieldStore()
                         self.isShieldActive = true
                         self.defaults.removeObject(forKey: self.unlockEndKey)
                         self.saveLockedApps()
@@ -250,12 +190,7 @@ final class ShieldManager: ObservableObject {
                         
                         // Verify it was applied
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                            if self.store.shield.applications != self.selectedApplications {
-                                debugPrint("⚠️ Verification: Reapplying shield...")
-                                self.store.shield.applications = self.selectedApplications
-                                self.store.shield.applicationCategories = nil
-                                self.store.shield.webDomains = nil
-                            }
+                            self.applyPersistedSelectionToShieldStore()
                         }
                     }
                     #endif
@@ -275,8 +210,8 @@ final class ShieldManager: ObservableObject {
                 // No unlock time - shield should be active
                 debugPrint("🔒 Background: No unlock time - ensuring shield is active")
                 #if canImport(ManagedSettings)
-                if #available(iOS 16.0, *), !self.selectedApplications.isEmpty {
-                    self.store.shield.applications = self.selectedApplications
+                if #available(iOS 16.0, *), self.hasShieldTargets {
+                    self.applyPersistedSelectionToShieldStore()
                     self.isShieldActive = true
                     self.saveLockedApps()
                 }
@@ -311,40 +246,7 @@ final class ShieldManager: ObservableObject {
     }
     
     private func ensureShieldState() {
-        // CRITICAL: Always ensure shield state matches unlock status
-        #if canImport(ManagedSettings)
-        if #available(iOS 16.0, *), !selectedApplications.isEmpty {
-            if let unlockEnd = defaults.object(forKey: unlockEndKey) as? Date {
-                if Date() >= unlockEnd {
-                    // Time expired - shield MUST be on
-                    if !isShieldActive || store.shield.applications == nil {
-                        debugPrint("🔒 CRITICAL: Time expired but shield not active - APPLYING NOW!")
-                        store.shield.applications = selectedApplications
-                        store.shield.applicationCategories = nil
-                        isShieldActive = true
-                        saveLockedApps()
-                    }
-                } else {
-                    // Still unlocked - shield MUST be off
-                    if isShieldActive || store.shield.applications != nil {
-                        debugPrint("🔓 CRITICAL: Still unlocked but shield active - REMOVING NOW!")
-                        store.shield.applications = nil
-                        store.shield.applicationCategories = nil
-                        isShieldActive = false
-                        saveLockedApps()
-                    }
-                }
-            } else {
-                // No unlock time - if shield should be active, ensure it is
-                if isShieldActive && store.shield.applications != selectedApplications {
-                    debugPrint("🔒 CRITICAL: Shield should be active but not set - APPLYING NOW!")
-                    store.shield.applications = selectedApplications
-                    store.shield.applicationCategories = nil
-                    saveLockedApps()
-                }
-            }
-        }
-        #endif
+        reconcileShieldState(notifyReminders: false)
     }
     
     private func startContinuousChecking() {
@@ -370,73 +272,165 @@ final class ShieldManager: ObservableObject {
     
     // Public so AppDelegate can call it from background tasks
     func checkAndApplyShieldIfNeeded() {
-        #if canImport(ManagedSettings)
-        if #available(iOS 16.0, *), !selectedApplications.isEmpty {
-            // Check if there's an unlock end time
-            if let unlockEnd = defaults.object(forKey: unlockEndKey) as? Date {
-                let now = Date()
-                if now >= unlockEnd {
-                    // 15 minutes expired - shield MUST be active
-                    debugPrint("⏰⏰⏰ TIMER EXPIRED: 15 minutes passed - APPLYING shield NOW!")
-                    debugPrint("⏰ Expired at: \(unlockEnd), Current: \(now)")
-                    
-                    store.shield.applications = selectedApplications
-                    store.shield.applicationCategories = nil
-                    store.shield.webDomains = nil
-                    isShieldActive = true
-                    defaults.removeObject(forKey: unlockEndKey)
-                    saveLockedApps()
-                    
-                    // Schedule reminder notifications to encourage user to do dhikr
-                    NotificationManager.shared.scheduleLockedAppReminders()
-                    
-                    debugPrint("✅ Shield APPLIED - Apps are NOW LOCKED!")
-                    
-                    // Double-check to ensure shield is applied
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-                        guard let self = self else { return }
-                        #if canImport(ManagedSettings)
-                        if #available(iOS 16.0, *) {
-                            if self.store.shield.applications != self.selectedApplications {
-                                debugPrint("⚠️ Shield not set, reapplying...")
-                                self.store.shield.applications = self.selectedApplications
-                                self.store.shield.applicationCategories = nil
-                                self.store.shield.webDomains = nil
-                                self.isShieldActive = true
-                                self.saveLockedApps()
-                            }
-                        }
-                        #endif
-                    }
-                } else {
-                    // Still in 15 minute unlock period - shield MUST be OFF
-                    let remaining = Int(unlockEnd.timeIntervalSince(now))
-                    if store.shield.applications != nil {
-                        let minutes = remaining / 60
-                        let seconds = remaining % 60
-                        debugPrint("⏰ Still unlocked for \(minutes)m \(seconds)s - shield should be off")
-                        // Shield is already removed, but ensure it stays off
-                    }
-                }
-            } else {
-                // No unlock time - shield MUST be active
-                if store.shield.applications != selectedApplications {
-                    debugPrint("🔒 No unlock session - applying shield")
-                    store.shield.applications = selectedApplications
-                    store.shield.applicationCategories = nil
-                    store.shield.webDomains = nil
-                    isShieldActive = true
-                    saveLockedApps()
-                    
-                    // Schedule reminder notifications to encourage user to do dhikr
-                    NotificationManager.shared.scheduleLockedAppReminders()
-                    
-                    debugPrint("✅ Shield ACTIVE - Apps locked")
-                }
+        reconcileShieldState()
+    }
+    
+    /// True when the user still has an active unlock session (grace window, 24h cap, and/or usage budget).
+    /// A leftover DeviceActivity flag after weeks away must not keep this true forever —
+    /// that blocked a new deed and made the dashboard look already unlocked.
+    func hasActiveUnlockSession() -> Bool {
+        if isInUnlockGracePeriod() {
+            return true
+        }
+        if let unlockEnd = getUnlockEndTime() {
+            return unlockEnd > Date()
+        }
+        if #available(iOS 16.0, *) {
+            // Cap missing (crash mid-unlock): honor monitoring only within 24h of session start.
+            if DeviceActivityManager.shared.isMonitoring,
+               let start = DeviceActivityManager.shared.sessionStartDate,
+               Date().timeIntervalSince(start) < 24 * 60 * 60 {
+                return true
             }
+        }
+        return false
+    }
+    
+    /// True during the post-deed grace window — prevents false auto-lock right after unlock.
+    func isInUnlockGracePeriod() -> Bool {
+        guard let graceEnd = defaults.object(forKey: unlockGracePeriodUntilKey) as? Date else { return false }
+        return graceEnd > Date()
+    }
+    
+    /// Atomically start an unlock session after a completed good deed.
+    @discardableResult
+    func completeUnlockSession(minutesEarned: Int) -> Bool {
+        guard minutesEarned > 0 else { return false }
+        let now = Date()
+        let hardCapEnd = now.addingTimeInterval(24 * 60 * 60)
+        // Short grace only — absorbs false DeviceActivity callbacks right after unlock.
+        // MUST end before the real usage budget, or the true threshold is swallowed
+        // (e.g. 15-min unlock + 15-min grace → apps never auto-lock, no notification).
+        let graceSeconds = min(3 * 60, TimeInterval(max(1, minutesEarned - 1) * 60))
+        let graceEnd = now.addingTimeInterval(graceSeconds)
+        
+        defaults.set(now, forKey: lastUnlockCompletedAtKey)
+        defaults.set(graceEnd, forKey: unlockGracePeriodUntilKey)
+        setUnlockEndTime(hardCapEnd)
+        
+        if #available(iOS 16.0, *) {
+            DeviceActivityManager.shared.persistBudgetBeforeMonitoring(minutes: minutesEarned)
+        }
+        
+        removeShield()
+        
+        if #available(iOS 16.0, *) {
+            DeviceActivityManager.shared.startUsageMonitoring(
+                allowedMinutes: minutesEarned,
+                extendExistingBudget: false
+            )
+        }
+        
+        isShieldActive = false
+        saveLockedApps()
+        defaults.synchronize()
+        debugPrint("✅ Unlock session started — \(minutesEarned) min budget, grace until \(graceEnd)")
+        return true
+    }
+    
+    private var hasUnlockSessionMetadata: Bool {
+        defaults.object(forKey: unlockEndKey) != nil
+            || defaults.object(forKey: unlockGracePeriodUntilKey) != nil
+            || defaults.object(forKey: lastUnlockCompletedAtKey) != nil
+    }
+
+    /// Clear all unlock-session metadata when intentionally locking.
+    func clearUnlockSessionMetadata() {
+        clearUnlockEndTime()
+        defaults.removeObject(forKey: unlockGracePeriodUntilKey)
+        defaults.removeObject(forKey: lastUnlockCompletedAtKey)
+    }
+    
+    /// Single source of truth: align ManagedSettings shield, persisted flags, and notifications.
+    func reconcileShieldState(notifyReminders: Bool = true) {
+        #if canImport(ManagedSettings)
+        guard #available(iOS 16.0, *), hasShieldTargets else { return }
+        
+        if hasActiveUnlockSession() {
+            if isShieldActive || !managedShieldHasNoConfiguration() {
+                debugPrint("🔓 Reconcile: active unlock — removing shield")
+                clearShieldStoreOnly()
+                isShieldActive = false
+                saveLockedApps()
+            }
+            NotificationManager.shared.onAppsUnlocked()
+            if #available(iOS 16.0, *) {
+                DeviceActivityManager.shared.restartMonitoringIfNeeded()
+            }
+            return
+        }
+        
+        // Session ended — clear all unlock metadata and stop monitoring.
+        // Runs every second, so only touch state when a session actually left something behind.
+        if hasUnlockSessionMetadata {
+            clearUnlockSessionMetadata()
+        }
+        if #available(iOS 16.0, *), DeviceActivityManager.shared.isMonitoring {
+            DeviceActivityManager.shared.stopMonitoring()
+        }
+        
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
+        let shieldIsStale = defaults.string(forKey: shieldAppliedBuildKey) != build
+        if shieldIsStale, !managedShieldHasNoConfiguration() {
+            // iOS keeps rendering the shield it built earlier; re-setting the store after an update
+            // makes it ask the shield extension again.
+            clearShieldStoreOnly()
+        }
+        let needsApply = shieldIsStale || !isShieldActive || managedShieldHasNoConfiguration()
+        if needsApply {
+            debugPrint("🔒 Reconcile: no active unlock — applying shield")
+            applyPersistedSelectionToShieldStore()
+            isShieldActive = true
+            defaults.set(build, forKey: shieldAppliedBuildKey)
+            saveLockedApps()
+        }
+        if notifyReminders {
+            NotificationManager.shared.onAppsLocked()
+            NotificationManager.shared.scheduleLockedAppReminders()
         }
         #endif
     }
+    
+    #if canImport(ManagedSettings)
+    /// Applies persisted app tokens and category tokens to `ManagedSettingsStore` (shield).
+    @available(iOS 16.0, *)
+    private func applyPersistedSelectionToShieldStore() {
+        if selectedApplications.isEmpty {
+            store.shield.applications = nil
+        } else {
+            store.shield.applications = selectedApplications
+        }
+        if selectedCategoryTokens.isEmpty {
+            store.shield.applicationCategories = nil
+        } else {
+            store.shield.applicationCategories = .specific(selectedCategoryTokens)
+        }
+        store.shield.webDomains = nil
+    }
+    
+    @available(iOS 16.0, *)
+    private func clearShieldStoreOnly() {
+        store.shield.applications = nil
+        store.shield.applicationCategories = nil
+        store.shield.webDomains = nil
+    }
+    
+    /// Whether the managed shield has nothing applied (apps and categories).
+    @available(iOS 16.0, *)
+    private func managedShieldHasNoConfiguration() -> Bool {
+        store.shield.applications == nil && store.shield.applicationCategories == nil
+    }
+    #endif
     
     private func loadLockedApps() {
         // Load shield active state
@@ -453,27 +447,48 @@ final class ShieldManager: ObservableObject {
                     // Extract apps and tokens
                     selectedApps = selection.applications
                     selectedApplications = selection.applicationTokens
+                    selectedCategoryTokens = selection.categoryTokens
                     
-                    debugPrint("✅ Loaded \(selectedApplications.count) apps from storage")
-                    debugPrint("📱 Apps loaded: \(selectedApplications)")
+                    debugPrint("✅ Loaded \(selectedApplications.count) app tokens, \(selectedCategoryTokens.count) categories from storage")
                     
                     // CRITICAL: Immediately apply shield if no unlock time or time expired
-                    if !selectedApplications.isEmpty {
+                    if hasShieldTargets {
                         if let unlockEnd = defaults.object(forKey: unlockEndKey) as? Date {
                             if Date() >= unlockEnd {
                                 // Time expired - apply shield immediately
-                                #if canImport(ManagedSettings)
-                                store.shield.applications = selectedApplications
-                                isShieldActive = true
-                                debugPrint("🔒 Applied shield immediately after load (time expired)")
+                                #if canImport(ManagedSettings) && canImport(FamilyControls)
+                                if #available(iOS 16.0, *) {
+                                    applyPersistedSelectionToShieldStore()
+                                    isShieldActive = true
+                                    debugPrint("🔒 Applied shield immediately after load (time expired)")
+                                }
+                                #endif
+                            } else {
+                                // Still unlocked — ensure flag and store match
+                                #if canImport(ManagedSettings) && canImport(FamilyControls)
+                                if #available(iOS 16.0, *) {
+                                    clearShieldStoreOnly()
+                                    isShieldActive = false
+                                    debugPrint("🔓 Loaded unlock session — shield cleared")
+                                }
                                 #endif
                             }
-                        } else {
+                        } else if !hasActiveUnlockSession() {
                             // No unlock time - apply shield by default
-                            #if canImport(ManagedSettings)
-                            store.shield.applications = selectedApplications
-                            isShieldActive = true
-                            debugPrint("🔒 Applied shield immediately after load (default)")
+                            #if canImport(ManagedSettings) && canImport(FamilyControls)
+                            if #available(iOS 16.0, *) {
+                                applyPersistedSelectionToShieldStore()
+                                isShieldActive = true
+                                debugPrint("🔒 Applied shield immediately after load (default)")
+                            }
+                            #endif
+                        } else {
+                            #if canImport(ManagedSettings) && canImport(FamilyControls)
+                            if #available(iOS 16.0, *) {
+                                clearShieldStoreOnly()
+                                isShieldActive = false
+                                debugPrint("🔓 Loaded usage-budget unlock — shield cleared")
+                            }
                             #endif
                         }
                     }
@@ -498,12 +513,13 @@ final class ShieldManager: ObservableObject {
                 // Create FamilyActivitySelection from our current selection
                 var selection = FamilyActivitySelection()
                 selection.applicationTokens = selectedApplications
+                selection.categoryTokens = selectedCategoryTokens
                 
                 // Encode and save
                 let data = try JSONEncoder().encode(selection)
                 defaults.set(data, forKey: selectionKey)
                 
-                debugPrint("💾 Saved \(selectedApplications.count) apps to storage")
+                debugPrint("💾 Saved \(selectedApplications.count) app tokens, \(selectedCategoryTokens.count) categories")
             } catch {
                 debugPrint("❌ Failed to encode selection: \(error)")
             }
@@ -512,68 +528,130 @@ final class ShieldManager: ObservableObject {
     }
 
     func updateSelection(apps: Set<ApplicationToken>) {
-        selectedApplications = apps
-        saveLockedApps()
+        var wrapped = FamilyActivitySelection()
+        wrapped.applicationTokens = apps
+        if #available(iOS 16.0, *) {
+            updateSelection(from: wrapped)
+        } else {
+            selectedApplications = apps
+            saveLockedApps()
+        }
     }
 
     func updateSelection(apps: Set<Application>) {
-        selectedApps = apps
-        selectedApplications = Set(apps.compactMap { $0.token })
-        debugPrint("📱 UPDATE SELECTION: \(selectedApplications.count) apps selected")
+        var wrapped = FamilyActivitySelection()
+        wrapped.applicationTokens = Set(apps.compactMap { $0.token })
+        if #available(iOS 16.0, *) {
+            updateSelection(from: wrapped)
+            selectedApps = apps
+            saveLockedApps()
+        } else {
+            selectedApps = apps
+            selectedApplications = wrapped.applicationTokens
+            saveLockedApps()
+        }
+    }
+    
+    /// The picker binding starts empty. Seed it from the saved lock so Cancel
+    /// does not look like “the user removed every app”.
+    @available(iOS 16.0, *)
+    func currentFamilySelection() -> FamilyActivitySelection {
+        var selection = FamilyActivitySelection()
+        #if canImport(FamilyControls)
+        selection.applicationTokens = selectedApplications
+        selection.categoryTokens = selectedCategoryTokens
+        #endif
+        return selection
+    }
+
+    /// Ignore a dismiss that would wipe an existing lock with an empty selection.
+    @available(iOS 16.0, *)
+    func commitPickerSelection(_ selection: FamilyActivitySelection) {
+        #if canImport(FamilyControls)
+        let empty = selection.applicationTokens.isEmpty && selection.categoryTokens.isEmpty
+        if empty && hasShieldTargets {
+            debugPrint("⚠️ Picker dismissed empty — keeping the current lock")
+            return
+        }
+        updateSelection(from: selection)
+        #endif
+    }
+
+    /// Full picker output: preserves **all** app tokens and **category** tokens (required for “whole category” / multi-app picks).
+    @available(iOS 16.0, *)
+    func updateSelection(from selection: FamilyActivitySelection) {
+        #if canImport(FamilyControls)
+        selectedApps = selection.applications
+        selectedApplications = selection.applicationTokens
+        selectedCategoryTokens = selection.categoryTokens
+        
+        debugPrint("📱 UPDATE SELECTION (full picker): \(selectedApplications.count) app tokens, \(selectedCategoryTokens.count) categories")
         saveLockedApps()
         
-        // CRITICAL: Ensure shield is applied if it should be active
         #if canImport(ManagedSettings)
-        if #available(iOS 16.0, *), !selectedApplications.isEmpty {
-            // If unlock time expired or no unlock time, apply shield immediately
-            if let unlockEnd = defaults.object(forKey: unlockEndKey) as? Date {
-                if Date() >= unlockEnd {
-                    // Time expired - apply shield
-                    store.shield.applications = selectedApplications
-                    isShieldActive = true
-                    saveLockedApps()
-                    debugPrint("✅ Shield applied after selection update (time expired)")
-                } else {
-                    // Still unlocked - remove shield
-                    store.shield.applications = nil
-                    isShieldActive = false
-                    saveLockedApps()
-                    debugPrint("✅ Shield removed after selection update (still unlocked)")
-                }
-            } else {
-                // No unlock time - apply shield by default
-                store.shield.applications = selectedApplications
+        guard hasShieldTargets else {
+            clearShieldStoreOnly()
+            isShieldActive = false
+            saveLockedApps()
+            debugPrint("✅ Selection cleared — shield cleared")
+            return
+        }
+        
+        if let unlockEnd = defaults.object(forKey: unlockEndKey) as? Date {
+            if Date() >= unlockEnd {
+                applyPersistedSelectionToShieldStore()
                 isShieldActive = true
                 saveLockedApps()
-                debugPrint("✅ Shield applied after selection update (default)")
+                debugPrint("✅ Shield applied after selection update (time expired)")
+            } else {
+                clearShieldStoreOnly()
+                isShieldActive = false
+                saveLockedApps()
+                debugPrint("✅ Shield removed after selection update (still unlocked)")
             }
+        } else {
+            applyPersistedSelectionToShieldStore()
+            isShieldActive = true
+            saveLockedApps()
+            debugPrint("✅ Shield applied after selection update (default)")
         }
+        #endif
         #endif
     }
 
     func applyShield() {
+        // Stop DeviceActivity usage monitoring when locking (extension may have already done this)
+        clearUnlockSessionMetadata()
+        if #available(iOS 16.0, *) {
+            DeviceActivityManager.shared.stopMonitoring()
+        }
+
         #if canImport(ManagedSettings)
         if #available(iOS 16.0, *) {
-            debugPrint("🔒 APPLYING Shield to \(selectedApplications.count) apps...")
-            debugPrint("🔒 Apps to lock: \(selectedApplications)")
-            
-            // Apply the shield directly
-            store.shield.applications = selectedApplications
+            debugPrint("🔒 APPLYING Shield — \(selectedApplications.count) app tokens, \(selectedCategoryTokens.count) categories")
+
+            guard hasShieldTargets else {
+                debugPrint("⚠️ applyShield: nothing selected")
+                return
+            }
+            applyPersistedSelectionToShieldStore()
             isShieldActive = true
             saveLockedApps()
-            
-            // Schedule reminder notifications to encourage user to do dhikr
-            NotificationManager.shared.scheduleLockedAppReminders()
-            
-            debugPrint("✅ Shield SUCCESSFULLY APPLIED!")
-            debugPrint("✅ isShieldActive = \(isShieldActive)")
-            debugPrint("✅ Store applications count: \(store.shield.applications?.count ?? 0)")
+
+            if !hasActiveUnlockSession() {
+                NotificationManager.shared.onAppsLocked()
+                NotificationManager.shared.scheduleLockedAppReminders()
+            }
+
+            debugPrint("✅ Shield APPLIED — isShieldActive = \(isShieldActive)")
         }
         #else
         isShieldActive = true
         saveLockedApps()
-        // Schedule reminder notifications even in simulator
-        NotificationManager.shared.scheduleLockedAppReminders()
+        if !hasActiveUnlockSession() {
+            NotificationManager.shared.onAppsLocked()
+            NotificationManager.shared.scheduleLockedAppReminders()
+        }
         debugPrint("⚠️ ManagedSettings not available (simulator?), but marking as active")
         #endif
     }
@@ -581,21 +659,19 @@ final class ShieldManager: ObservableObject {
     func removeShield() {
         #if canImport(ManagedSettings)
         if #available(iOS 16.0, *) {
-            debugPrint("🔓 REMOVING Shield from all apps...")
-            store.shield.applications = nil
+            debugPrint("🔓 REMOVING Shield from all apps and categories...")
+            clearShieldStoreOnly()
             isShieldActive = false
             saveLockedApps()
             
-            // Cancel reminder notifications since apps are now unlocked
-            NotificationManager.shared.cancelLockedAppReminders()
+            NotificationManager.shared.onAppsUnlocked()
             
             debugPrint("✅ Shield SUCCESSFULLY REMOVED!")
         }
         #else
         isShieldActive = false
         saveLockedApps()
-        // Cancel reminder notifications
-        NotificationManager.shared.cancelLockedAppReminders()
+        NotificationManager.shared.onAppsUnlocked()
         debugPrint("⚠️ ManagedSettings not available (simulator?), but marking as inactive")
         #endif
     }
@@ -609,83 +685,61 @@ final class ShieldManager: ObservableObject {
     func forceApplyShieldOnExpiry() {
         debugPrint("🔒🔒🔒 FORCE APPLY SHIELD ON EXPIRY CALLED 🔒🔒🔒")
         
+        if hasActiveUnlockSession() {
+            debugPrint("⏳ Ignoring stale expiry — unlock session still active")
+            NotificationManager.shared.onAppsUnlocked()
+            reconcileShieldState(notifyReminders: false)
+            return
+        }
+        
         #if canImport(ManagedSettings)
-        if #available(iOS 16.0, *), !selectedApplications.isEmpty {
-            // Check if unlock time has expired
-            if let unlockEnd = defaults.object(forKey: unlockEndKey) as? Date {
-                let now = Date()
-                if now >= unlockEnd {
-                    debugPrint("⏰ CONFIRMED: Unlock time expired - FORCING shield application")
-                    debugPrint("⏰ Expired at: \(unlockEnd), Current: \(now)")
-                    
-                    // FORCE APPLY - Multiple attempts to ensure it sticks
-                    store.shield.applications = selectedApplications
-                    store.shield.applicationCategories = nil
-                    store.shield.webDomains = nil
-                    isShieldActive = true
-                    
-                    // Clear unlock time
-                    defaults.removeObject(forKey: unlockEndKey)
-                    saveLockedApps()
-                    
-                    // Schedule reminder notifications to encourage user to do dhikr
-                    NotificationManager.shared.scheduleLockedAppReminders()
-                    
-                    debugPrint("✅ Shield FORCE APPLIED - Attempt 1")
-                    debugPrint("✅ Shield applications: \(store.shield.applications?.count ?? 0)")
-                    
-                    // Retry after short delay to ensure it sticks (iOS sometimes needs this)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-                        guard let self = self else { return }
-                        #if canImport(ManagedSettings)
-                        if #available(iOS 16.0, *) {
-                            self.store.shield.applications = self.selectedApplications
-                            self.store.shield.applicationCategories = nil
-                            self.store.shield.webDomains = nil
-                            self.isShieldActive = true
-                            self.saveLockedApps()
-                            debugPrint("✅ Shield FORCE APPLIED - Attempt 2 (retry)")
-                        }
-                        #endif
-                    }
-                    
-                    // Final retry after longer delay
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-                        guard let self = self else { return }
-                        #if canImport(ManagedSettings)
-                        if #available(iOS 16.0, *) {
-                            if self.store.shield.applications != self.selectedApplications {
-                                debugPrint("⚠️ WARNING: Shield still not set after 1s, final retry...")
-                                self.store.shield.applications = self.selectedApplications
-                                self.store.shield.applicationCategories = nil
-                                self.store.shield.webDomains = nil
-                                self.isShieldActive = true
-                                self.saveLockedApps()
-                                debugPrint("✅ Shield FORCE APPLIED - Attempt 3 (final retry)")
-                            } else {
-                                debugPrint("✅ Shield confirmed active after retry")
-                            }
-                        }
-                        #endif
-                    }
-                } else {
-                    let remaining = Int(unlockEnd.timeIntervalSince(now))
-                    debugPrint("⏰ Unlock time NOT expired yet - \(remaining) seconds remaining")
+        if #available(iOS 16.0, *), hasShieldTargets {
+            debugPrint("⏰ CONFIRMED: No active unlock — forcing shield application")
+            applyPersistedSelectionToShieldStore()
+            isShieldActive = true
+            clearUnlockSessionMetadata()
+            saveLockedApps()
+            if !hasActiveUnlockSession() {
+                NotificationManager.shared.onAppsLocked()
+                NotificationManager.shared.scheduleLockedAppReminders()
+            }
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                guard let self = self else { return }
+                #if canImport(ManagedSettings)
+                if #available(iOS 16.0, *) {
+                    self.applyPersistedSelectionToShieldStore()
+                    self.isShieldActive = true
+                    self.saveLockedApps()
                 }
-            } else {
-                // No unlock time - shield should be active by default
-                debugPrint("🔒 No unlock time found - applying shield by default")
-                store.shield.applications = selectedApplications
-                store.shield.applicationCategories = nil
-                store.shield.webDomains = nil
-                isShieldActive = true
-                saveLockedApps()
-                debugPrint("✅ Shield applied (default)")
+                #endif
             }
         } else {
-            debugPrint("⚠️ Cannot apply shield: No selected applications")
+            debugPrint("⚠️ Cannot apply shield: No selection (apps or categories)")
         }
         #endif
+    }
+    
+    /// ContentView used to save only `UserDefaults.standard` key `unlockEndsAt` (Double) while the shield
+    /// timer reads `unlockEndTime` in the shared defaults — subscribers saw unlock UI but the shield kept re-applying.
+    private func migrateLegacyUnlockEndTimeIfNeeded() {
+        if defaults.object(forKey: unlockEndKey) as? Date != nil { return }
+        if let ts = UserDefaults.standard.object(forKey: "unlockEndsAt") as? Double {
+            let date = Date(timeIntervalSince1970: ts)
+            if date > Date() {
+                defaults.set(date, forKey: unlockEndKey)
+                debugPrint("✅ Migrated legacy unlockEndsAt → shared unlockEndTime")
+            }
+            UserDefaults.standard.removeObject(forKey: "unlockEndsAt")
+            return
+        }
+        if let date = UserDefaults.standard.object(forKey: "unlockEndTime") as? Date {
+            if date > Date() {
+                defaults.set(date, forKey: unlockEndKey)
+                debugPrint("✅ Migrated legacy standard unlockEndTime → shared unlockEndTime")
+            }
+            UserDefaults.standard.removeObject(forKey: "unlockEndTime")
+        }
     }
     
     // MARK: - Unlock Time Management
@@ -707,6 +761,8 @@ final class ShieldManager: ObservableObject {
     func getUnlockEndTime() -> Date? {
         return defaults.object(forKey: unlockEndKey) as? Date
     }
+    
+    func getUnlockGracePeriodEnd() -> Date? {
+        defaults.object(forKey: unlockGracePeriodUntilKey) as? Date
+    }
 }
-
-

@@ -2,15 +2,14 @@
 //  SplashScreenView.swift
 //  scrolldeeds
 //
-//  Beautiful animated splash screen with sparkles icon and ScrollDeeds branding
+//  Splash: the sharp Nafsi portrait, then the name.
 //
 
 import SwiftUI
 
 struct SplashScreenView: View {
-    @State private var sparklesScale: CGFloat = 0.5
+    @State private var sparklesScale: CGFloat = 0.92
     @State private var sparklesOpacity: Double = 0
-    @State private var sparklesRotation: Double = -10
     
     @State private var titleOffset: CGFloat = 20
     @State private var titleOpacity: Double = 0
@@ -20,62 +19,54 @@ struct SplashScreenView: View {
     @State private var isAnimationComplete = false
     
     var onComplete: () -> Void
+
+    private var splashTextGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                AppTheme.primaryLight,
+                AppTheme.primary,
+                Color(red: 0.20, green: 0.66, blue: 0.44)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
     
     var body: some View {
         ZStack {
-            // Background gradient
-            LinearGradient(
-                colors: [
-                    Color(hex: "1a472a"),  // Dark green
-                    Color(hex: "0f2818")   // Darker green
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-            
-            VStack(spacing: 24) {
+            Color.white
+                .ignoresSafeArea()
+
+            VStack(spacing: 28) {
                 Spacer()
-                
-                // Sparkles icon
-                Image(systemName: "sparkles")
-                    .font(.system(size: 80, weight: .light))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [.white, Color(hex: "d4af37")],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+
+                Image("NafsiMark")
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+                    .frame(width: 168, height: 168)
                     .scaleEffect(sparklesScale)
                     .opacity(sparklesOpacity)
-                    .rotationEffect(.degrees(sparklesRotation))
-                    .shadow(color: Color(hex: "d4af37").opacity(0.5), radius: 20, x: 0, y: 10)
-                
-                // App name
-                Text("ScrollDeeds")
+
+                Text(NSLocalizedString("splash.app_name", comment: "Nafsi"))
                     .font(.system(size: 48, weight: .bold, design: .rounded))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [.white, Color(hex: "d4af37")],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
+                    .foregroundStyle(splashTextGradient)
                     .offset(y: titleOffset)
                     .opacity(titleOpacity)
-                    .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 5)
-                
+
                 // Subtitle
-                Text("Break free from doomscrolling")
+                Text(NSLocalizedString("splash.subtitle", comment: "Built for Muslims who want more from life"))
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.white.opacity(0.8))
+                    .foregroundColor(AppTheme.primary.opacity(0.72))
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 24)
                     .opacity(subtitleOpacity)
                 
                 Spacer()
                 
                 // Loading indicator (subtle)
-                LoadingSpinner()
+                LoadingSpinner(gradient: splashTextGradient)
                     .scaleEffect(0.8)
                     .opacity(subtitleOpacity)
                     .padding(.bottom, 50)
@@ -89,12 +80,13 @@ struct SplashScreenView: View {
     
     // Custom loading spinner to avoid conflict with ProgressView
     private struct LoadingSpinner: View {
+        let gradient: LinearGradient
         @State private var isAnimating = false
         
         var body: some View {
             Circle()
                 .trim(from: 0, to: 0.7)
-                .stroke(Color.white, lineWidth: 3)
+                .stroke(gradient, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                 .frame(width: 20, height: 20)
                 .rotationEffect(Angle(degrees: isAnimating ? 360 : 0))
                 .onAppear {
@@ -108,11 +100,9 @@ struct SplashScreenView: View {
     private func startAnimations() {
         debugPrint("✨ SPLASH SCREEN: Starting animations...")
         
-        // Sparkles animation
-        withAnimation(.spring(response: 0.8, dampingFraction: 0.6)) {
+        withAnimation(.spring(response: 0.8, dampingFraction: 0.82)) {
             sparklesScale = 1.0
             sparklesOpacity = 1.0
-            sparklesRotation = 0
         }
         
         // Title animation (delayed)
@@ -130,10 +120,9 @@ struct SplashScreenView: View {
             }
         }
         
-        // Add a subtle continuous sparkle animation
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            withAnimation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true)) {
-                sparklesScale = 1.1
+            withAnimation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true)) {
+                sparklesScale = 1.03
             }
         }
         

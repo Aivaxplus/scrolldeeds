@@ -1,0 +1,4 @@
+/* Localized Info.plist strings — Dutch */
+"NSCameraUsageDescription" = "Nafsi gebruikt de camera zodat je Fajr kunt uitzetten door het voorwerp te fotograferen dat jij koos.";
+"NSAlarmKitUsageDescription" = "Nafsi plant een echte Fajr-wekker zodat je ook op stil wakker wordt. Fotografeer je voorwerp om hem uit te zetten.";
+"NSUserTrackingUsageDescription" = "Nafsi gebruikt dit om te meten of je via advertenties bent gekomen en om onze marketing te verbeteren. Je kunt dit altijd wijzigen in Instellingen.";

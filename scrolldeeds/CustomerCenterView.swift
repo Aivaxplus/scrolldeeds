@@ -29,11 +29,11 @@ struct CustomerCenterView: View {
                                 .font(.system(size: 60))
                                 .foregroundColor(AppTheme.primary)
                             
-                            Text("Manage Subscription")
+                            Text(NSLocalizedString("customer_center.title", comment: "Manage Subscription"))
                                 .font(.system(size: 28, weight: .bold))
                                 .foregroundColor(AppTheme.textPrimary)
                             
-                            Text("View and manage your subscription settings")
+                            Text(NSLocalizedString("customer_center.subtitle", comment: "View and manage your subscription settings"))
                                 .font(.system(size: 16))
                                 .foregroundColor(AppTheme.textSecondary)
                                 .multilineTextAlignment(.center)
@@ -58,7 +58,7 @@ struct CustomerCenterView: View {
                                 HStack {
                                     Image(systemName: "arrow.clockwise")
                                         .font(.system(size: 18, weight: .semibold))
-                                    Text("Restore Purchases")
+                                    Text(NSLocalizedString("customer_center.restore", comment: "Restore Purchases"))
                                         .font(.system(size: 17, weight: .semibold))
                                 }
                                 .foregroundColor(AppTheme.primary)
@@ -70,12 +70,12 @@ struct CustomerCenterView: View {
                             .disabled(isLoading)
                             
                             // Open RevenueCat Customer Center (if available)
-                            if let customerInfo = subscriptionManager.customerInfo {
+                            if subscriptionManager.customerInfo != nil {
                                 Link(destination: URL(string: "https://apps.apple.com/account/subscriptions")!) {
                                     HStack {
                                         Image(systemName: "external-link")
                                             .font(.system(size: 18, weight: .semibold))
-                                        Text("Manage in App Store")
+                                        Text(NSLocalizedString("customer_center.manage_app_store", comment: "Manage in App Store"))
                                             .font(.system(size: 17, weight: .semibold))
                                     }
                                     .foregroundColor(AppTheme.textPrimary)
@@ -92,21 +92,21 @@ struct CustomerCenterView: View {
                         #if DEBUG
                         if let customerInfo = subscriptionManager.customerInfo {
                             VStack(alignment: .leading, spacing: 12) {
-                                Text("Debug Info")
+                                Text(NSLocalizedString("customer_center.debug_info", comment: "Debug Info"))
                                     .font(.system(size: 16, weight: .bold))
                                     .foregroundColor(AppTheme.textPrimary)
                                 
                                 VStack(alignment: .leading, spacing: 8) {
-                                    Text("User ID: \(customerInfo.originalAppUserId)")
+                                    Text(String(format: NSLocalizedString("customer_center.user_id", comment: "User ID: %@"), customerInfo.originalAppUserId))
                                         .font(.system(size: 12, design: .monospaced))
                                         .foregroundColor(AppTheme.textSecondary)
                                     
-                                    Text("Active Subscriptions: \(customerInfo.activeSubscriptions.joined(separator: ", "))")
+                                    Text(String(format: NSLocalizedString("customer_center.active_subs", comment: "Active Subscriptions: %@"), customerInfo.activeSubscriptions.joined(separator: ", ")))
                                         .font(.system(size: 12, design: .monospaced))
                                         .foregroundColor(AppTheme.textSecondary)
                                     
                                     if let expirationDate = subscriptionManager.getEntitlementExpirationDate("Scrolldeeds Pro") {
-                                        Text("Expires: \(expirationDate.formatted())")
+                                        Text(String(format: NSLocalizedString("customer_center.expires", comment: "Expires: %@"), expirationDate.formatted()))
                                             .font(.system(size: 12, design: .monospaced))
                                             .foregroundColor(AppTheme.textSecondary)
                                     }
@@ -122,7 +122,7 @@ struct CustomerCenterView: View {
                     .padding(.bottom, 40)
                 }
             }
-            .navigationTitle("Account")
+            .navigationTitle(NSLocalizedString("customer_center.account", comment: "Account"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -138,15 +138,15 @@ struct CustomerCenterView: View {
             .overlay {
                 if showError {
                     CustomAlertView(
-                        title: "Error",
-                        message: errorMessage ?? "An unknown error occurred",
+                        title: NSLocalizedString("customer_center.error", comment: "Error"),
+                        message: errorMessage ?? NSLocalizedString("customer_center.unknown_error", comment: "An unknown error occurred"),
                         icon: "exclamationmark.triangle.fill",
                         iconColor: .orange,
                         isPresented: $showError,
                         primaryAction: {
                             showError = false
                         },
-                        primaryActionTitle: "OK"
+                        primaryActionTitle: NSLocalizedString("common.ok", comment: "OK")
                     )
                 }
             }
@@ -166,11 +166,12 @@ struct CustomerCenterView: View {
         isLoading = true
         defer { isLoading = false }
         
-        do {
-            try await subscriptionManager.restorePurchases()
-        } catch {
-            errorMessage = "Failed to restore purchases: \(error.localizedDescription)"
-            showError = true
+        await subscriptionManager.restorePurchases()
+        await MainActor.run {
+            if !subscriptionManager.hasPremiumAccess {
+                errorMessage = NSLocalizedString("paywall.restore.none", comment: "")
+                showError = true
+            }
         }
     }
 }
@@ -187,11 +188,11 @@ struct SubscriptionStatusCard: View {
                 .foregroundColor(isPremium ? .green : .red)
             
             VStack(alignment: .leading, spacing: 4) {
-                Text(isPremium ? "Premium Active" : "No Active Subscription")
+                Text(isPremium ? NSLocalizedString("customer_center.premium_active", comment: "Premium Active") : NSLocalizedString("customer_center.no_subscription", comment: "No Active Subscription"))
                     .font(.system(size: 18, weight: .bold))
                     .foregroundColor(AppTheme.textPrimary)
                 
-                Text(isPremium ? "You have access to all premium features" : "Subscribe to unlock premium features")
+                Text(isPremium ? NSLocalizedString("customer_center.premium_message", comment: "You have access to all premium features") : NSLocalizedString("customer_center.subscribe_message", comment: "Subscribe to unlock premium features"))
                     .font(.system(size: 14))
                     .foregroundColor(AppTheme.textSecondary)
             }

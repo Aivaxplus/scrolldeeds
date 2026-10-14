@@ -27,47 +27,26 @@ struct LockedAppRow: View {
         "rectangle.grid.1x2.fill"
     ]
     
-    private let appColors: [Color] = [
-        Color(red: 0.2, green: 0.7, blue: 0.9),  // Blue
-        Color(red: 0.9, green: 0.3, blue: 0.5),  // Pink
-        Color(red: 0.3, green: 0.8, blue: 0.5),  // Green
-        Color(red: 0.9, green: 0.6, blue: 0.2),  // Orange
-        Color(red: 0.6, green: 0.4, blue: 0.9),  // Purple
-        Color(red: 0.2, green: 0.6, blue: 0.8),  // Teal
-        Color(red: 0.9, green: 0.5, blue: 0.3),  // Coral
-        Color(red: 0.4, green: 0.7, blue: 0.3)   // Lime
-    ]
+    private var appAccent: Color {
+        index.isMultiple(of: 2) ? AppTheme.primary : AppTheme.accent
+    }
     
     var body: some View {
         HStack(spacing: 16) {
-            // App icon placeholder with color
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            gradient: Gradient(colors: [
-                                appColors[index % appColors.count],
-                                appColors[index % appColors.count].opacity(0.7)
-                            ]),
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 52, height: 52)
-                    .shadow(color: appColors[index % appColors.count].opacity(0.3), radius: 8, y: 4)
-                
-                Image(systemName: appIcons[index % appIcons.count])
-                    .font(.system(size: 24, weight: .medium))
-                    .foregroundColor(.white)
-            }
+            SDIconBadge(
+                systemName: appIcons[index % appIcons.count],
+                size: 52,
+                iconSize: 22,
+                color: appAccent
+            )
             
             // App info
             VStack(alignment: .leading, spacing: 4) {
-                Text("App \(index + 1)")
+                Text(String(format: NSLocalizedString("locked_app.app_number", comment: "App %d"), index + 1))
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(AppTheme.textPrimary)
                 
-                Text(isLocked ? "Locked" : "Unlocked")
+                Text(isLocked ? NSLocalizedString("dashboard.locked", comment: "Locked") : NSLocalizedString("dashboard.unlocked", comment: "Unlocked"))
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(AppTheme.textSecondary)
             }
@@ -86,23 +65,21 @@ struct LockedAppRow: View {
             }
             .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isLocked)
         }
-        .padding(16)
-        .background(AppTheme.background.opacity(0.5))
-        .cornerRadius(16)
+        .padding(AppSpacing.md)
+        .background(AppTheme.cardSecondary.opacity(0.58))
+        .cornerRadius(AppRadius.md)
         .overlay(
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
                 .stroke(
                     isLocked ? 
                         AppTheme.error.opacity(0.2) : 
                         AppTheme.success.opacity(0.2),
-                    lineWidth: 1.5
+                    lineWidth: 1
                 )
         )
         .shadow(
-            color: isLocked ? 
-                AppTheme.error.opacity(0.08) : 
-                AppTheme.success.opacity(0.08),
-            radius: 10,
+            color: Color.black.opacity(0.035),
+            radius: 8,
             y: 4
         )
     }

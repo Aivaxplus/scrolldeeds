@@ -1,0 +1,9 @@
+.derivedData*/
+.build_strip_test/
+.tmp-dealpha/
+.cursor/
+.DS_Store
+xcuserdata/
+*.xcuserstate
+node_modules/
+.heartshot.sh

@@ -2,248 +2,356 @@
 //  ThankYouView.swift
 //  scrolldeeds
 //
-//  Thank you page shown after successful subscription
+//  Thank you page after successful subscription — premium gold style (matches paywall / onboarding).
 //
 
 import SwiftUI
 
 struct ThankYouView: View {
     let onContinue: () -> Void
-    
+
     @State private var showContent = false
     @State private var showButton = false
+    @State private var softPulse = false
     @State private var confettiOpacity: Double = 0
-    @State private var pulseAnimation = false
-    
+
     var body: some View {
         ZStack {
-            // Background
-            LinearGradient(
-                colors: [
-                    Color(red: 0.04, green: 0.08, blue: 0.06),
-                    Color(red: 0.08, green: 0.14, blue: 0.10),
-                    Color(red: 0.06, green: 0.10, blue: 0.08)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-            
-            // Radial glow
+            SDPageBackground()
+
             RadialGradient(
-                colors: [AppTheme.primary.opacity(0.15), Color.clear],
+                colors: [AppTheme.primary.opacity(0.08), Color.clear],
                 center: .center,
                 startRadius: 0,
-                endRadius: 350
+                endRadius: 400
             )
             .ignoresSafeArea()
-            
-            // Confetti particles
-            ForEach(0..<20, id: \.self) { i in
-                ConfettiParticle(delay: Double(i) * 0.1)
-                    .opacity(confettiOpacity)
-            }
-            
-            VStack(spacing: 40) {
-                Spacer()
-                
-                // Success Icon
+
+            RadialGradient(
+                colors: [
+                    AppTheme.primary.opacity(0.08),
+                    AppTheme.primary.opacity(0.06),
+                    Color.clear
+                ],
+                center: .topLeading,
+                startRadius: 40,
+                endRadius: 380
+            )
+            .ignoresSafeArea()
+
+            RadialGradient(
+                colors: [AppTheme.primary.opacity(0.08), Color.clear],
+                center: .bottomTrailing,
+                startRadius: 20,
+                endRadius: 320
+            )
+            .ignoresSafeArea()
+
+            ThankYouStarfield()
+            ThankYouConfettiLayer(opacity: confettiOpacity)
+
+            VStack(spacing: 0) {
+                Spacer(minLength: 12)
+
+                // Success mark — solid gold + soft rings (like reference)
                 ZStack {
-                    // Outer rings
-                    ForEach(0..<3, id: \.self) { i in
+                    ForEach(0..<2, id: \.self) { i in
                         Circle()
-                            .stroke(AppTheme.success.opacity(0.15 - Double(i) * 0.04), lineWidth: 3)
-                            .frame(width: CGFloat(180 - i * 30), height: CGFloat(180 - i * 30))
-                            .scaleEffect(pulseAnimation ? 1.0 + Double(i) * 0.05 : 1.0)
+                            .stroke(
+                                AppTheme.primary.opacity(0.22 - Double(i) * 0.08),
+                                lineWidth: 1
+                            )
+                            .frame(width: 132 + CGFloat(i * 18), height: 132 + CGFloat(i * 18))
+                            .scaleEffect(softPulse ? 1.02 : 1.0)
                             .animation(
-                                .easeInOut(duration: 1.5)
-                                .repeatForever(autoreverses: true)
-                                .delay(Double(i) * 0.2),
-                                value: pulseAnimation
+                                .easeInOut(duration: 2.2).repeatForever(autoreverses: true).delay(Double(i) * 0.15),
+                                value: softPulse
                             )
                     }
-                    
-                    // Main circle
+
                     Circle()
                         .fill(
                             LinearGradient(
-                                colors: [AppTheme.success, AppTheme.success.opacity(0.8)],
+                                colors: [
+                                    Color(red: 0.98, green: 0.86, blue: 0.48),
+                                    Color(red: 0.93, green: 0.76, blue: 0.36),
+                                    Color(red: 0.88, green: 0.68, blue: 0.30)
+                                ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
                         )
-                        .frame(width: 120, height: 120)
-                        .shadow(color: AppTheme.success.opacity(0.5), radius: 30)
-                    
+                        .frame(width: 96, height: 96)
+                        .overlay(
+                            Circle()
+                                .stroke(
+                                    LinearGradient(
+                                        colors: [.white.opacity(0.35), .clear],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    lineWidth: 1.5
+                                )
+                        )
+                        .shadow(color: AppTheme.primary.opacity(0.45), radius: 20, y: 8)
+
                     Image(systemName: "checkmark")
-                        .font(.system(size: 56, weight: .bold))
+                        .font(.system(size: 44, weight: .bold))
                         .foregroundColor(.white)
                 }
                 .opacity(showContent ? 1 : 0)
-                .scaleEffect(showContent ? 1 : 0.5)
-                
-                // Text content
-                VStack(spacing: 20) {
-                    Text("JazakAllahu Khayran!")
-                        .font(.system(size: 32, weight: .black))
-                        .foregroundColor(.white)
-                    
-                    Text("Welcome to ScrollDeeds Premium")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundColor(AppTheme.accent)
-                    
-                    Text("You've taken the first step towards\ntransforming your screen time into worship")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.white.opacity(0.7))
+                .scaleEffect(showContent ? 1 : 0.85)
+
+                Spacer().frame(height: 28)
+
+                VStack(spacing: 14) {
+                    Text(NSLocalizedString("thankyou.title", comment: ""))
+                        .font(.system(size: 30, weight: .bold))
+                        .foregroundColor(AppTheme.textPrimary)
+                        .multilineTextAlignment(.center)
+                        .minimumScaleFactor(0.85)
+                        .lineLimit(2)
+
+                    Text(NSLocalizedString("thankyou.subtitle", comment: ""))
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(AppTheme.primary)
+
+                    Text(NSLocalizedString("thankyou.message", comment: ""))
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(AppTheme.textSecondary)
                         .multilineTextAlignment(.center)
                         .lineSpacing(4)
                 }
+                .padding(.horizontal, 28)
                 .opacity(showContent ? 1 : 0)
-                .offset(y: showContent ? 0 : 30)
-                
-                // Benefits reminder
-                VStack(spacing: 16) {
-                    ThankYouBenefit(icon: "lock.open.fill", text: "Unlock apps with dhikr")
-                    ThankYouBenefit(icon: "chart.line.uptrend.xyaxis", text: "Track your spiritual growth")
-                    ThankYouBenefit(icon: "bell.badge.fill", text: "Smart reminders")
-                    ThankYouBenefit(icon: "infinity", text: "Unlimited sessions")
+                .offset(y: showContent ? 0 : 12)
+
+                Spacer(minLength: 20)
+
+                VStack(spacing: 14) {
+                    ThankYouBenefitRow(
+                        icon: "lock.open.fill",
+                        text: NSLocalizedString("thankyou.benefit1", comment: "")
+                    )
+                    ThankYouBenefitRow(
+                        icon: "chart.line.uptrend.xyaxis",
+                        text: NSLocalizedString("thankyou.benefit2", comment: "")
+                    )
+                    ThankYouBenefitRow(
+                        icon: "bell.badge.fill",
+                        text: NSLocalizedString("thankyou.benefit3", comment: "")
+                    )
+                    ThankYouBenefitRow(
+                        icon: "infinity",
+                        text: NSLocalizedString("thankyou.benefit4", comment: "")
+                    )
                 }
-                .padding(24)
+                .padding(22)
+                .frame(maxWidth: .infinity)
                 .background(
-                    RoundedRectangle(cornerRadius: 24)
-                        .fill(Color.white.opacity(0.05))
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .fill(AppTheme.card)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 24)
-                                .stroke(AppTheme.success.opacity(0.2), lineWidth: 1)
+                            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                                .stroke(
+                                    LinearGradient(
+                                        colors: [
+                                            AppTheme.primary.opacity(0.55),
+                                            AppTheme.primary.opacity(0.2)
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    lineWidth: 1
+                                )
                         )
                 )
+                .padding(.horizontal, 24)
                 .opacity(showContent ? 1 : 0)
-                .offset(y: showContent ? 0 : 20)
-                
-                Spacer()
-                
-                // Continue button
+                .offset(y: showContent ? 0 : 10)
+
+                Spacer(minLength: 16)
+
                 Button(action: {
                     HapticManager.shared.success()
                     onContinue()
                 }) {
-                    HStack(spacing: 12) {
-                        Text("Start Your Journey")
-                            .font(.system(size: 18, weight: .bold))
-                        
+                    HStack(spacing: 10) {
+                        Text(NSLocalizedString("thankyou.cta", comment: ""))
                         Image(systemName: "arrow.right")
-                            .font(.system(size: 16, weight: .bold))
+                            .font(.system(size: 15, weight: .bold))
                     }
-                    .foregroundColor(.black)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 18)
-                    .background(
-                        LinearGradient(
-                            colors: [AppTheme.success, AppTheme.success.opacity(0.8)],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .cornerRadius(16)
-                    .shadow(color: AppTheme.success.opacity(0.4), radius: 20, y: 10)
                 }
-                .opacity(showButton ? 1 : 0)
-                .offset(y: showButton ? 0 : 20)
+                .buttonStyle(PrimaryButtonStyle())
                 .padding(.horizontal, 24)
-                .padding(.bottom, 40)
+                .opacity(showButton ? 1 : 0)
+                .offset(y: showButton ? 0 : 12)
+
+                Spacer(minLength: 12)
+                Spacer().frame(height: 8)
             }
-            .padding(.horizontal, 24)
         }
         .onAppear {
-            // Staggered animations
-            withAnimation(.spring(response: 0.6, dampingFraction: 0.7).delay(0.2)) {
+            PostHogManager.shared.screen(AnalyticsScreen.thankYou)
+            PostHogManager.shared.trackThankYouViewed()
+            softPulse = true
+            withAnimation(.spring(response: 0.55, dampingFraction: 0.78).delay(0.15)) {
                 showContent = true
             }
-            
-            withAnimation(.easeOut(duration: 0.5).delay(0.8)) {
+            withAnimation(.easeOut(duration: 0.45).delay(0.65)) {
                 showButton = true
             }
-            
-            withAnimation(.easeOut(duration: 0.5).delay(0.3)) {
+            withAnimation(.easeOut(duration: 0.55).delay(0.22)) {
                 confettiOpacity = 1
             }
-            
-            // Start pulse animation
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                pulseAnimation = true
-            }
-            
-            // Haptic feedback
             HapticManager.shared.success()
         }
     }
 }
 
-// MARK: - Supporting Views
+// MARK: - Confetti (restored; uses container size — not UIScreen)
 
-struct ThankYouBenefit: View {
-    let icon: String
-    let text: String
-    
+private struct ThankYouConfettiLayer: View {
+    var opacity: Double
+    private static let count = 22
+
     var body: some View {
-        HStack(spacing: 16) {
+        GeometryReader { geo in
             ZStack {
-                Circle()
-                    .fill(AppTheme.success.opacity(0.15))
-                    .frame(width: 44, height: 44)
-                
-                Image(systemName: icon)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(AppTheme.success)
+                ForEach(0..<Self.count, id: \.self) { i in
+                    ThankYouConfettiPiece(index: i, size: geo.size)
+                }
             }
-            
-            Text(text)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundColor(.white.opacity(0.9))
-            
-            Spacer()
-            
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 20))
-                .foregroundColor(AppTheme.success)
         }
+        .allowsHitTesting(false)
+        .ignoresSafeArea()
+        .opacity(opacity)
     }
 }
 
-struct ConfettiParticle: View {
-    let delay: Double
-    
-    @State private var animate = false
-    
-    private let colors: [Color] = [
-        AppTheme.success,
-        AppTheme.accent,
+private struct ThankYouConfettiPiece: View {
+    let index: Int
+    let size: CGSize
+
+    @State private var falling = false
+
+    private let palette: [Color] = [
         AppTheme.primary,
-        .white
+        AppTheme.primaryLight,
+        AppTheme.primary,
+        Color.white.opacity(0.92)
     ]
-    
+
+    private var pieceX: CGFloat {
+        let u = CGFloat((index * 1103515245 &+ 12345) % 10000) / 10000
+        return 24 + u * max(40, size.width - 48)
+    }
+
+    private var pieceSize: CGFloat {
+        6 + CGFloat((index * 13) % 7)
+    }
+
+    private var duration: Double {
+        2.4 + Double(index % 6) * 0.28
+    }
+
+    private var startDelay: Double {
+        Double(index) * 0.09
+    }
+
     var body: some View {
         Circle()
-            .fill(colors.randomElement() ?? AppTheme.success)
-            .frame(width: CGFloat.random(in: 6...12), height: CGFloat.random(in: 6...12))
+            .fill(palette[index % palette.count])
+            .frame(width: pieceSize, height: pieceSize)
             .position(
-                x: CGFloat.random(in: 50...UIScreen.main.bounds.width - 50),
-                y: animate ? UIScreen.main.bounds.height + 50 : -50
+                x: pieceX,
+                y: falling ? size.height + 50 : -45
             )
-            .opacity(animate ? 0 : 1)
+            .opacity(falling ? 0 : 1)
             .animation(
-                .easeIn(duration: Double.random(in: 2...4))
-                .delay(delay)
-                .repeatForever(autoreverses: false),
-                value: animate
+                .easeIn(duration: duration)
+                    .delay(startDelay)
+                    .repeatForever(autoreverses: false),
+                value: falling
             )
             .onAppear {
-                animate = true
+                falling = true
             }
+    }
+}
+
+// MARK: - Starfield (subtle static specks)
+
+private struct ThankYouStarfield: View {
+    private let seeds: [CGFloat] = [0.12, 0.28, 0.44, 0.61, 0.78, 0.09, 0.52, 0.67, 0.33, 0.91, 0.22, 0.85, 0.15, 0.73, 0.38]
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack {
+                ForEach(Array(seeds.enumerated()), id: \.offset) { i, sx in
+                    let sy = seeds[(i + 5) % seeds.count]
+                    Circle()
+                        .fill(i % 3 == 0 ? AppTheme.primary.opacity(0.35) : AppTheme.primary.opacity(0.25))
+                        .frame(width: i % 4 == 0 ? 3 : 2, height: i % 4 == 0 ? 3 : 2)
+                        .position(x: sx * geo.size.width, y: sy * geo.size.height)
+                }
+            }
+        }
+        .allowsHitTesting(false)
+        .ignoresSafeArea()
+    }
+}
+
+// MARK: - Benefit row (green icon accents, gold check pill)
+
+private struct ThankYouBenefitRow: View {
+    let icon: String
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(AppTheme.primary.opacity(0.12))
+                    .frame(width: 44, height: 44)
+                    .overlay(
+                        Circle()
+                            .stroke(AppTheme.primary.opacity(0.45), lineWidth: 1)
+                    )
+                Image(systemName: icon)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(AppTheme.primary)
+            }
+
+            Text(text)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(AppTheme.textPrimary)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 4)
+
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.98, green: 0.86, blue: 0.48),
+                                Color(red: 0.90, green: 0.72, blue: 0.32)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 24, height: 24)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.white)
+            }
+        }
     }
 }
 
 #Preview {
     ThankYouView(onContinue: {})
 }
-

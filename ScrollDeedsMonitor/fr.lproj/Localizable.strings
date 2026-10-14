@@ -1,0 +1,4 @@
+"notification.autolock.body" = "Tes applis sont verrouillées. Accomplis une bonne action dans Nafsi pour les déverrouiller. 🌿";
+"notification.autolock.followup1.body" = "Tes applis sont toujours verrouillées. Accomplis une bonne action pour continuer. 🤲";
+"notification.autolock.followup2.body" = "N'oublie pas d'accomplir ta bonne action dans Nafsi pour déverrouiller tes applis.";
+"notification.autolock.followup3.body" = "Nafsi t'attend. Accomplis une bonne action et déverrouille tes applis. 🌙";
